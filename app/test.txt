@@ -1,39 +1,31 @@
-python - <<'PY'
-import pandas as pd
-
-f = "data/Demande_Predomiciliation.xlsx"
-df = pd.read_excel(f, dtype=object)
-
-for col in df.columns:
-    if "decision" in str(col).lower():
-        print("Colonne :", repr(col))
-        print("Type :", df[col].dtype)
-        print("Exemples :", df[col].dropna().head(10).tolist())
-PY
-
-
-
-import pandas as pd
 import unicodedata
+import pandas as pd
 
-def normaliser_colonne(valeur):
+def normaliser_entete(valeur):
     texte = unicodedata.normalize("NFKC", str(valeur))
     return " ".join(texte.replace("\xa0", " ").split()).casefold()
 
 def trouver_colonne(df, nom):
-    cible = normaliser_colonne(nom)
-    for col in df.columns:
-        if normaliser_colonne(col) == cible:
-            return col
+    cible = normaliser_entete(nom)
+
+    for colonne in df.columns:
+        if normaliser_entete(colonne) == cible:
+            return colonne
+
     return None
 
 col_date = trouver_colonne(df, "Request Decision Date")
 
-if col_date is not None:
-    df["date_decision_normalisee"] = pd.to_datetime(
-        df[col_date],
-        dayfirst=True,
-        errors="coerce"
-    )
-else:
-    print("ALERTE : colonne Request Decision Date introuvable")
+if col_date is None:
+    raise ValueError("Colonne Request Decision Date introuvable")
+
+df["date_decision_normalisee"] = pd.to_datetime(
+    df[col_date],
+    dayfirst=True,
+    errors="coerce"
+)
+
+print(
+    "Dates de décision disponibles :",
+    df["date_decision_normalisee"].notna().sum()
+)
