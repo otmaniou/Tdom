@@ -1,31 +1,17 @@
-import unicodedata
-import pandas as pd
+python -m unittest discover \
+  -s TL_One_V1_0_Comparatif/tests -v
 
-def normaliser_entete(valeur):
-    texte = unicodedata.normalize("NFKC", str(valeur))
-    return " ".join(texte.replace("\xa0", " ").split()).casefold()
 
-def trouver_colonne(df, nom):
-    cible = normaliser_entete(nom)
 
-    for colonne in df.columns:
-        if normaliser_entete(colonne) == cible:
-            return colonne
+python TL_One_V1_0_Comparatif/tl_one_v10.py \
+  --root .
 
-    return None
 
-col_date = trouver_colonne(df, "Request Decision Date")
 
-if col_date is None:
-    raise ValueError("Colonne Request Decision Date introuvable")
 
-df["date_decision_normalisee"] = pd.to_datetime(
-    df[col_date],
-    dayfirst=True,
-    errors="coerce"
-)
+pip install streamlit pymupdf
 
-print(
-    "Dates de décision disponibles :",
-    df["date_decision_normalisee"].notna().sum()
-)
+streamlit run TL_One_V1_0_Comparatif/app_v10.py \
+  --server.address 0.0.0.0 \
+  --server.port 8501 \
+  -- --root .
