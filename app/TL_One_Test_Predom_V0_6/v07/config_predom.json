@@ -1,0 +1,16 @@
+{
+  "description": "Libellés EXACTS à adapter aux en-têtes du vrai Excel. Prédom distinct de DOM.",
+  "header_row": 1,
+  "sheet_name": null,
+  "colonnes": {
+    "client_id": "Identifiant client",
+    "predom_reference": "Référence Prédom",
+    "dom_reference": null,
+    "status": "Statut",
+    "decision_date": "Request Decision Date"
+  },
+  "statuts_eligibles": [
+    "Domicilié",
+    "Accord Prédom"
+  ]
+}
