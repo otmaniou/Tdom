@@ -1,0 +1,17 @@
+{
+  "header_row": 1,
+  "sheet_name": null,
+  "colonnes": {
+    "client_id": "Client",
+    "predom_reference": "Référence",
+    "dom_reference": null,
+    "status": "Statut",
+    "decision_date": null,
+    "name": "Nom complet/Raison social"
+  },
+  "statuts_eligibles": [
+    "Domicilié",
+    "Accord Prédom"
+  ],
+  "seuil_nom_a_verifier": 85
+}
