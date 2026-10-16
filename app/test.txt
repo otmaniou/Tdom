@@ -15,3 +15,17 @@ streamlit run TL_One_V1_0_Comparatif/app_v10.py \
   --server.address 0.0.0.0 \
   --server.port 8501 \
   -- --root .
+
+
+
+#!/bin/bash
+set -e
+
+cd /mnt/TL_One_Test_Predom_V0_6
+
+exec python -m streamlit run \
+  TL_One_V1_0_Comparatif/app_v10.py \
+  --server.address 0.0.0.0 \
+  --server.port 8501 \
+  --server.headless true \
+  -- --root .
