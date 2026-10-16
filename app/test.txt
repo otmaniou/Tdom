@@ -31,3 +31,27 @@ print("Clés racines :", list(d.keys()))
 for k, v in d.items():
     print(k, ":", type(v).__name__)
 PY
+
+
+
+cd /mnt/TL_One_Socle_DOM_V0_4
+
+python -m unittest discover -s tests -v
+
+
+
+
+
+
+python - <<'PY'
+import json
+
+with open("schemas/catalogue_champs_v15a.json", encoding="utf-8") as f:
+    d = json.load(f)
+
+print("Source :", d["source_notebook"])
+print("Nombre de champs :", d["nombre_champs"])
+
+for document, champs in d["champs_par_type_document"].items():
+    print(document, ":", len(champs), "champs")
+PY
