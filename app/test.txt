@@ -74,3 +74,74 @@ cd /mnt/TL_One_Test_Predom_V0_6
 chmod +x app.sh
 
 ./app.sh
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Se placer à la racine du projet TL-One
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
+cd "$PROJECT_ROOT"
+
+echo "=== TL-One V1.0 ==="
+echo "Projet : $PROJECT_ROOT"
+echo "Python : $(command -v python)"
+
+# Vérification de l'application
+if [ ! -f "$SCRIPT_DIR/app_v10.py" ]; then
+    echo "ERREUR : app_v10.py introuvable"
+    exit 1
+fi
+
+# Vérification des résultats
+if [ ! -f "$PROJECT_ROOT/resultats/v10/comparatif_dossiers_v10.json" ]; then
+    echo "ERREUR : résultats V1.0 absents"
+    echo "Exécuter d'abord :"
+    echo "python TL_One_V1_0_Comparatif/tl_one_v10.py --root ."
+    exit 1
+fi
+
+# Vérification de Streamlit
+python -m streamlit --version
+
+# 8910 pour Workspace, 8888 pour Domino App publiée
+PORT="${PORT:-8910}"
+
+echo "Démarrage Streamlit sur le port $PORT"
+
+exec python -m streamlit run "$SCRIPT_DIR/app_v10.py" \
+    --server.address 0.0.0.0 \
+    --server.port "$PORT" \
+    --server.headless true \
+    --server.fileWatcherType none \
+    --browser.gatherUsageStats false \
+    -- --root "$PROJECT_ROOT"
+
+
+
+
+
+
+
+
+cd /mnt/TL_One_Test_Predom_V0_6/TL_One_V1_0_Comparatif
+
+chmod +x app_v10.sh
+
+PORT=8911 ./app_v10.sh
