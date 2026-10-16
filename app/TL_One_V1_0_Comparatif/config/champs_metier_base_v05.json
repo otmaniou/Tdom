@@ -1,0 +1,554 @@
+{
+  "version": "0.5.0-spec",
+  "basis": "pipeline_part2_v15_A_normalization_dq_confidence(1).ipynb",
+  "schema_source_hash_sha256": "4ab29ddbb30bcd432d51a1d645512367d775def6f8354566a1b773e1a761b473",
+  "design": {
+    "cts_metier_reference": "CTS for corresponding contract, salary, transferable share and permit fields",
+    "predom_dom_official": "PREDOM.Numéro de domiciliation",
+    "predom_workflow_reference": "PREDOM.Référence",
+    "reference_policy": "SOURCE_SPECIFIC",
+    "raw_and_normalized_separate": true,
+    "no_guessed_confidence": true,
+    "confidence_is_heuristic_not_probability": true,
+    "human_signature_review_required": true
+  },
+  "documents_v15a": {
+    "CTS": "CONTRAT_SPECIFIQUE",
+    "CTR": "CONTRAT_TRAVAIL",
+    "DOM": "ENGAGEMENT_DOMICILIATION",
+    "TTR": "TITRE_TRAVAIL",
+    "PTR": "PERMIS_TRAVAIL_COUVERTURE"
+  },
+  "champs_sources_v15a": {
+    "ENGAGEMENT_DOMICILIATION": [
+      "DOM_NOM_RAISON_SOCIAL_CLIENT",
+      "DOM_COMPTE_LOCAL",
+      "DOM_ADRESSE_CLIENT",
+      "DOM_AGENCE_DOMICILIATAIRE",
+      "DOM_NUMERO_CONTRAT",
+      "DOM_DUREE_CONTRAT_MOIS",
+      "DOM_DATE_DEBUT_CONTRAT",
+      "DOM_DATE_FIN_CONTRAT",
+      "DOM_NOM_RAISON_SOCIAL_EMPLOYEUR",
+      "DOM_ADRESSE_EMPLOYEUR",
+      "DOM_SALAIRE_NET_MENSUEL",
+      "DOM_PART_TRANSFERABLE",
+      "DOM_TAUX_TRANSFERABLE",
+      "DOM_MONTANT_TOTAL_DOMICILIE",
+      "DOM_DATE_SIGNATURE"
+    ],
+    "CONTRAT_TRAVAIL": [
+      "CTR_REFERENCE_DOCUMENT",
+      "CTR_TYPE",
+      "CTR_EMPLOYEUR",
+      "CTR_ACTIVITE_EMPLOYEUR",
+      "CTR_DUREE_MOIS",
+      "CTR_DATE_DEBUT_CONTRAT",
+      "CTR_POSTE",
+      "CTR_NOM_PRENOM_TRAVAILLEUR",
+      "CTR_PERE_NOM_PRENOM",
+      "CTR_MERE_NOM_PRENOM",
+      "CTR_NATIONALITE",
+      "CTR_DATE_NAISSANCE",
+      "CTR_LIEU_PAYS_NAISSANCE",
+      "CTR_ADRESSE_ALGERIE",
+      "CTR_QUALIFICATION",
+      "CTR_NUMERO_PERMIS_TRAVAIL",
+      "CTR_DATE_DELIVRANCE_PERMIS",
+      "CTR_DATE_DEBUT_VALIDITE_PERMIS",
+      "CTR_DATE_FIN_VALIDITE_PERMIS",
+      "CTR_SALAIRE_BRUT",
+      "CTR_SALAIRE_NET",
+      "CTR_AFFILIATION_SS",
+      "CTR_NUMERO_EMPLOYEUR",
+      "CTR_DATE_SIGNATURE",
+      "CTR_REFERENCE_DOMICILIATION",
+      "CTR_SIGNATURE_TRAVAILLEUR_PRESENTE",
+      "CTR_SIGNATURE_EMPLOYEUR_PRESENTE",
+      "CTR_CACHET_EMPLOYEUR_PRESENT"
+    ],
+    "CONTRAT_SPECIFIQUE": [
+      "CTS_REFERENCE_DOCUMENT",
+      "CTS_SAP_ID",
+      "CTS_EMPLOYEUR",
+      "CTS_ACTIVITE_EMPLOYEUR",
+      "CTS_DUREE_MOIS",
+      "CTS_DATE_DEBUT_CONTRAT",
+      "CTS_POSTE",
+      "CTS_NOM_PRENOM_TRAVAILLEUR",
+      "CTS_PERE_NOM_PRENOM",
+      "CTS_MERE_NOM_PRENOM",
+      "CTS_NATIONALITE",
+      "CTS_DATE_NAISSANCE",
+      "CTS_LIEU_PAYS_NAISSANCE",
+      "CTS_ADRESSE_ALGERIE",
+      "CTS_QUALIFICATION",
+      "CTS_NUMERO_PERMIS_TRAVAIL",
+      "CTS_DATE_DELIVRANCE_PERMIS",
+      "CTS_DATE_DEBUT_VALIDITE_PERMIS",
+      "CTS_DATE_FIN_VALIDITE_PERMIS",
+      "CTS_LIGNE_SALAIRE_BRUTE",
+      "CTS_SALAIRE_NET",
+      "CTS_SALAIRE_NET_ANCIEN",
+      "CTS_MENTION_AU_LIEU_DE_PRESENTE",
+      "CTS_PART_TRANSFERABLE",
+      "CTS_PART_PAYABLE_DZD",
+      "CTS_NUMERO_SS_PAYS_ORIGINE",
+      "CTS_NUMERO_SS_ALGERIE",
+      "CTS_DATE_DOCUMENT",
+      "CTS_SIGNATURE_TRAVAILLEUR_PRESENTE",
+      "CTS_SIGNATURE_EMPLOYEUR_PRESENTE",
+      "CTS_CACHET_EMPLOYEUR_PRESENT",
+      "CTS_VISA_INSPECTION_TRAVAIL_PRESENT"
+    ],
+    "TITRE_TRAVAIL": [
+      "TTR_NUMERO_PERMIS",
+      "TTR_NUMERO_MANUSCRIT",
+      "TTR_POSTE",
+      "TTR_DUREE",
+      "TTR_DATE_DEBUT",
+      "TTR_DATE_FIN",
+      "TTR_LIEU_TRAVAIL",
+      "TTR_EMPLOYEUR",
+      "TTR_ADRESSE_EMPLOYEUR",
+      "TTR_FAIT_A",
+      "TTR_DATE_DELIVRANCE",
+      "TTR_NOM",
+      "TTR_PRENOM",
+      "TTR_DATE_NAISSANCE",
+      "TTR_LIEU_NAISSANCE",
+      "TTR_PAYS",
+      "TTR_NATIONALITE",
+      "TTR_QUALIFICATION",
+      "TTR_DATE_ENTREE_ALGERIE",
+      "TTR_PHOTO_PRESENTE",
+      "TTR_CACHET_PRESENT"
+    ],
+    "PERMIS_TRAVAIL_COUVERTURE": [
+      "PTR_NUMERO_SERIE",
+      "PTR_WILAYA",
+      "PTR_CACHET_DIRECTION_EMPLOI_PRESENT"
+    ]
+  },
+  "champs_metier": {
+    "client_nom": {
+      "libelle": "Nom et prénom du salarié",
+      "groupe": "identite",
+      "type": "text",
+      "reference": "CTS",
+      "importance": "normal",
+      "sources": {
+        "CTS": [
+          "CTS_NOM_PRENOM_TRAVAILLEUR"
+        ],
+        "CTR": [
+          "CTR_NOM_PRENOM_TRAVAILLEUR"
+        ],
+        "DOM": [
+          "DOM_NOM_RAISON_SOCIAL_CLIENT"
+        ],
+        "TTR": [
+          "TTR_NOM",
+          "TTR_PRENOM"
+        ],
+        "PREDOM": [
+          "Nom complet/Raison social"
+        ]
+      },
+      "note": "TTR nom et prénom à composer; comparaison accent/espaces contrôlée; ne pas substituer une autre personne"
+    },
+    "client_identifiant": {
+      "libelle": "Identifiant client banque",
+      "groupe": "identite",
+      "type": "reference",
+      "reference": "PREDOM",
+      "importance": "normal",
+      "sources": {
+        "PREDOM": [
+          "Identifiant client"
+        ]
+      }
+    },
+    "compte_local": {
+      "libelle": "Compte bancaire local",
+      "groupe": "identite",
+      "type": "reference",
+      "reference": "CA10",
+      "importance": "normal",
+      "sources": {
+        "DOM": [
+          "DOM_COMPTE_LOCAL"
+        ],
+        "CA10": [
+          "Numéro de compte"
+        ]
+      },
+      "note": "Conserver comme chaîne; CA10 et DOM peuvent avoir des formats différents, pas d’équivalence forcée"
+    },
+    "agence_code": {
+      "libelle": "Code agence",
+      "groupe": "identite",
+      "type": "reference",
+      "reference": "PREDOM",
+      "importance": "normal",
+      "sources": {
+        "PREDOM": [
+          "Code Agence"
+        ],
+        "CA10": [
+          "Code agence"
+        ]
+      }
+    },
+    "employeur": {
+      "libelle": "Employeur",
+      "groupe": "identite",
+      "type": "text",
+      "reference": "CTS",
+      "importance": "normal",
+      "sources": {
+        "CTS": [
+          "CTS_EMPLOYEUR"
+        ],
+        "CTR": [
+          "CTR_EMPLOYEUR"
+        ],
+        "DOM": [
+          "DOM_NOM_RAISON_SOCIAL_EMPLOYEUR"
+        ]
+      },
+      "note": "Conserver les raisons sociales brutes; équivalence juridique à valider"
+    },
+    "nationalite": {
+      "libelle": "Nationalité",
+      "groupe": "identite",
+      "type": "text",
+      "reference": "CTS",
+      "importance": "normal",
+      "sources": {
+        "CTS": [
+          "CTS_NATIONALITE"
+        ],
+        "CTR": [
+          "CTR_NATIONALITE"
+        ],
+        "TTR": [
+          "TTR_NATIONALITE"
+        ]
+      }
+    },
+    "date_naissance": {
+      "libelle": "Date de naissance",
+      "groupe": "identite",
+      "type": "date",
+      "reference": "CTS",
+      "importance": "normal",
+      "sources": {
+        "CTS": [
+          "CTS_DATE_NAISSANCE"
+        ],
+        "CTR": [
+          "CTR_DATE_NAISSANCE"
+        ],
+        "TTR": [
+          "TTR_DATE_NAISSANCE"
+        ]
+      }
+    },
+    "contrat_ref_cts": {
+      "libelle": "Référence CTS",
+      "groupe": "contrat",
+      "type": "reference",
+      "reference": "CTS",
+      "importance": "normal",
+      "sources": {
+        "CTS": [
+          "CTS_REFERENCE_DOCUMENT"
+        ]
+      },
+      "note": "Ne pas confondre avec référence CTR ou numéro de domiciliation"
+    },
+    "contrat_ref_ctr": {
+      "libelle": "Référence CTR",
+      "groupe": "contrat",
+      "type": "reference",
+      "reference": "CTR",
+      "importance": "normal",
+      "sources": {
+        "CTR": [
+          "CTR_REFERENCE_DOCUMENT"
+        ]
+      }
+    },
+    "contrat_numero_dom": {
+      "libelle": "Numéro de contrat déclaré DOM",
+      "groupe": "contrat",
+      "type": "reference",
+      "reference": "DOM",
+      "importance": "normal",
+      "sources": {
+        "DOM": [
+          "DOM_NUMERO_CONTRAT"
+        ]
+      }
+    },
+    "contrat_debut": {
+      "libelle": "Date de début du contrat",
+      "groupe": "contrat",
+      "type": "date",
+      "reference": "CTS",
+      "importance": "normal",
+      "sources": {
+        "CTS": [
+          "CTS_DATE_DEBUT_CONTRAT"
+        ],
+        "CTR": [
+          "CTR_DATE_DEBUT_CONTRAT"
+        ],
+        "DOM": [
+          "DOM_DATE_DEBUT_CONTRAT"
+        ],
+        "PREDOM": [
+          "Date début du contrat"
+        ]
+      }
+    },
+    "contrat_fin": {
+      "libelle": "Date de fin du contrat",
+      "groupe": "contrat",
+      "type": "date",
+      "reference": "CTS_DERIVED",
+      "importance": "normal",
+      "sources": {
+        "CTS": [],
+        "DOM": [
+          "DOM_DATE_FIN_CONTRAT"
+        ],
+        "PREDOM": [
+          "Date fin de contrat"
+        ]
+      },
+      "note": "Aucune clé CTS_DATE_FIN_CONTRAT V15A : valeur calculée depuis CTS_DATE_DEBUT_CONTRAT + CTS_DUREE_MOIS, après validation règle de fin inclusive. Indiquer DERIVED et jamais RAW."
+    },
+    "contrat_duree_mois": {
+      "libelle": "Durée du contrat (mois)",
+      "groupe": "contrat",
+      "type": "integer",
+      "reference": "CTS",
+      "importance": "normal",
+      "sources": {
+        "CTS": [
+          "CTS_DUREE_MOIS"
+        ],
+        "CTR": [
+          "CTR_DUREE_MOIS"
+        ],
+        "DOM": [
+          "DOM_DUREE_CONTRAT_MOIS"
+        ]
+      }
+    },
+    "poste": {
+      "libelle": "Poste occupé",
+      "groupe": "contrat",
+      "type": "text",
+      "reference": "CTS",
+      "importance": "normal",
+      "sources": {
+        "CTS": [
+          "CTS_POSTE"
+        ],
+        "CTR": [
+          "CTR_POSTE"
+        ],
+        "TTR": [
+          "TTR_POSTE"
+        ]
+      }
+    },
+    "salaire_net": {
+      "libelle": "Salaire net mensuel",
+      "groupe": "montants",
+      "type": "amount",
+      "reference": "CTS",
+      "importance": "critique",
+      "sources": {
+        "CTS": [
+          "CTS_SALAIRE_NET"
+        ],
+        "CTR": [
+          "CTR_SALAIRE_NET"
+        ],
+        "DOM": [
+          "DOM_SALAIRE_NET_MENSUEL"
+        ]
+      }
+    },
+    "part_transferable": {
+      "libelle": "Part transférable",
+      "groupe": "montants",
+      "type": "amount",
+      "reference": "CTS",
+      "importance": "critique",
+      "sources": {
+        "CTS": [
+          "CTS_PART_TRANSFERABLE"
+        ],
+        "DOM": [
+          "DOM_PART_TRANSFERABLE"
+        ]
+      }
+    },
+    "montant_domicilie": {
+      "libelle": "Montant total domicilié",
+      "groupe": "montants",
+      "type": "amount",
+      "reference": "PREDOM",
+      "importance": "critique",
+      "sources": {
+        "DOM": [
+          "DOM_MONTANT_TOTAL_DOMICILIE"
+        ],
+        "PREDOM": [
+          "Montant total"
+        ]
+      },
+      "note": "Ne pas remplacer par Total Financing Settlement Amount (règlement cumulé)"
+    },
+    "permis_numero": {
+      "libelle": "N° permis de travail",
+      "groupe": "permis",
+      "type": "reference",
+      "reference": "CTS",
+      "importance": "normal",
+      "sources": {
+        "CTS": [
+          "CTS_NUMERO_PERMIS_TRAVAIL"
+        ],
+        "CTR": [
+          "CTR_NUMERO_PERMIS_TRAVAIL"
+        ],
+        "TTR": [
+          "TTR_NUMERO_PERMIS"
+        ]
+      }
+    },
+    "permis_debut": {
+      "libelle": "Début validité permis",
+      "groupe": "permis",
+      "type": "date",
+      "reference": "CTS",
+      "importance": "normal",
+      "sources": {
+        "CTS": [
+          "CTS_DATE_DEBUT_VALIDITE_PERMIS"
+        ],
+        "CTR": [
+          "CTR_DATE_DEBUT_VALIDITE_PERMIS"
+        ],
+        "TTR": [
+          "TTR_DATE_DEBUT"
+        ]
+      }
+    },
+    "permis_fin": {
+      "libelle": "Fin validité permis",
+      "groupe": "permis",
+      "type": "date",
+      "reference": "CTS",
+      "importance": "normal",
+      "sources": {
+        "CTS": [
+          "CTS_DATE_FIN_VALIDITE_PERMIS"
+        ],
+        "CTR": [
+          "CTR_DATE_FIN_VALIDITE_PERMIS"
+        ],
+        "TTR": [
+          "TTR_DATE_FIN"
+        ]
+      }
+    },
+    "predom_reference": {
+      "libelle": "Référence prédomiciliation",
+      "groupe": "predom",
+      "type": "reference",
+      "reference": "PREDOM",
+      "importance": "normal",
+      "sources": {
+        "PREDOM": [
+          "Référence"
+        ]
+      },
+      "note": "Identifiant de workflow, distinct du numéro DOM officiel"
+    },
+    "reference_dom_officielle": {
+      "libelle": "Numéro de domiciliation officiel",
+      "groupe": "predom",
+      "type": "reference",
+      "reference": "PREDOM",
+      "importance": "critique",
+      "sources": {
+        "PREDOM": [
+          "Numéro de domiciliation"
+        ],
+        "CTR": [
+          "CTR_REFERENCE_DOMICILIATION"
+        ]
+      },
+      "note": "Référence officielle générée par Prédom ; CTR ne peut la contenir qu’après apposition du cachet"
+    },
+    "predom_statut": {
+      "libelle": "Statut Prédom",
+      "groupe": "predom",
+      "type": "status",
+      "reference": "PREDOM",
+      "importance": "normal",
+      "sources": {
+        "PREDOM": [
+          "Statut"
+        ]
+      }
+    },
+    "cts_signature_travailleur_presente": {
+      "libelle": "Signature salarié visible sur CTS",
+      "groupe": "signatures",
+      "type": "boolean",
+      "reference": "CTS",
+      "importance": "normal",
+      "sources": {
+        "CTS": [
+          "CTS_SIGNATURE_TRAVAILLEUR_PRESENTE"
+        ]
+      },
+      "note": "Présence OCR ≠ vérification de conformité avec CA10"
+    },
+    "dom_signature": {
+      "libelle": "Signature engagement DOM",
+      "groupe": "signatures",
+      "type": "signature",
+      "reference": "CA10",
+      "importance": "critique",
+      "sources": {
+        "DOM": [],
+        "CA10": [
+          "Signature de référence"
+        ]
+      },
+      "note": "Zone recadrée + comparaison visuelle par l’agent ; pas d’authentification automatique"
+    },
+    "ctr_cachet_employeur": {
+      "libelle": "Cachet employeur CTR présent",
+      "groupe": "signatures",
+      "type": "boolean",
+      "reference": "CTR",
+      "importance": "normal",
+      "sources": {
+        "CTR": [
+          "CTR_CACHET_EMPLOYEUR_PRESENT"
+        ]
+      }
+    }
+  },
+  "fields_hors_comparatif": "Autres clés V15A préservées en vue détaillée même si aucune ligne du comparatif ne leur correspond."
+}
