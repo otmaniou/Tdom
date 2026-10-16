@@ -29,3 +29,48 @@ exec python -m streamlit run \
   --server.port 8501 \
   --server.headless true \
   -- --root .
+
+
+
+
+
+
+
+
+
+
+
+#!/usr/bin/env bash
+set -e
+
+# Répertoire du projet TL-One
+cd "$(dirname "$0")"
+
+echo "=== TL-One V1.0 ==="
+echo "Répertoire : $(pwd)"
+echo "Python : $(which python)"
+
+# Vérification des fichiers nécessaires
+test -f TL_One_V1_0_Comparatif/app_v10.py
+test -f resultats/v10/comparatif_dossiers_v10.json
+
+# Port 8910 pour les tests Workspace
+# Port 8888 pour la publication Domino App
+PORT="${PORT:-8910}"
+
+exec python -m streamlit run \
+  TL_One_V1_0_Comparatif/app_v10.py \
+  --server.address 0.0.0.0 \
+  --server.port "$PORT" \
+  --server.headless true \
+  --server.fileWatcherType none \
+  --browser.gatherUsageStats false \
+  -- --root .
+
+
+
+cd /mnt/TL_One_Test_Predom_V0_6
+
+chmod +x app.sh
+
+./app.sh
