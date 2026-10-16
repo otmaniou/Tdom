@@ -1,0 +1,64 @@
+{
+  "version": "CARTHAGODOM_COLS_V0_4",
+  "description": "Libellés exacts d’un export CarthagoDom HORIZONTAL (en-têtes en ligne 1, un dossier par ligne). Aucune recherche d’alias. Mapping modifiable dans ce seul fichier. Les champs non confirmés ne sont pas inventés.",
+  "colonnes": {
+    "client_code": "Client",
+    "nom_complet": "Nom complet/Raison social",
+    "reference_dom": "Numéro de domiciliation",
+    "compte_local": null,
+    "montant_total": "Montant final",
+    "statut_domiciliation": null
+  },
+  "valeurs_statut_valide": [],
+  "champs_obligatoires_pour_certification": [
+    "client_code",
+    "nom_complet",
+    "reference_dom",
+    "montant_total",
+    "compte_local",
+    "statut_domiciliation"
+  ],
+  "notes": {
+    "montant_total": "Source exacte = Montant final. Distinct de Montant initial et Total Financing Settlement Amount. Les montants doivent être revérifiés sur justificatifs.",
+    "compte_local": "Aucun champ de compte bancaire complet visible dans cette fiche. Ne pas assimiler Client au compte.",
+    "statut_domiciliation": "Aucun statut de validation MOCI explicite visible. Situation d’apurement et Dom Documents Received ne prouvent pas la validation.",
+    "nom_complet": "Libellé lisible sur capture transposée = Nom complet/Raison social. Le fichier Excel source original n’a pas encore été fourni pour vérifier les caractères exacts.",
+    "reference_dom": "Numéro de domiciliation (libellé fixe). Compare au tampon CTR indépendamment du Qwen.",
+    "code_bic": "Code bic ; distinct de l’identifiant de domiciliation.",
+    "format": "IMPORT HORIZONTAL seulement. carthagodom_vertical.py supprimé (hypothèse de lecture erronée)."
+  },
+  "format_source_observe": {
+    "type": "tableau_horizontal",
+    "header_row": 1,
+    "une_ligne_par_domiciliation": true,
+    "preuve": "Précision explicite de l’utilisateur ; capture antérieure volontairement transposée à des fins de lecture",
+    "verification_fichier_xlsx_original": "EN_ATTENTE"
+  },
+  "libelles_supplementaires": {
+    "agence": "Agence",
+    "date_domiciliation": "Date domiciliation",
+    "type_operation": "Type opération",
+    "mode_reglement": "Mode de règlement",
+    "montant_initial": "Montant initial",
+    "total_financing_settlement_amount": "Total Financing Settlement Amount",
+    "devise": "Devise",
+    "nature_operation": "Nature opération",
+    "description": "Description",
+    "situation_apurement": "Situation d'apurement",
+    "dom_documents_received": "Dom Documents Received",
+    "docs_received_date": "Docs Received Date",
+    "regime": "Régime",
+    "accord_pre_dom": "Accord pré-dom",
+    "date_declaration": "Date déclaration",
+    "date_apurement": "Date apurement",
+    "last_expedition_date": "Last Expedition Date",
+    "invoices_date": "Invoices Date",
+    "invoices_reference": "Invoices Reference",
+    "deferred_period": "deferredPeriod",
+    "dom_amount_tolerance": "Dom Amount Tolerance",
+    "docs_received_comment": "Docs Received Comment",
+    "name": "Name",
+    "last_financing_settlement_date": "Last Financing Settlement Date",
+    "code_bic": "Code bic"
+  }
+}

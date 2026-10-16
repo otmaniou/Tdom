@@ -1,0 +1,44 @@
+{
+  "version": "DOM_CERT_V0_1",
+  "usage": "Démonstration interne; configuration métier à valider avant toute utilisation de production",
+  "mandatory_documents": [
+    "ENGAGEMENT_DOMICILIATION",
+    "CONTRAT_TRAVAIL",
+    "CONTRAT_SPECIFIQUE",
+    "TITRE_TRAVAIL"
+  ],
+  "critical_fields": [
+    "DOM_COMPTE_LOCAL",
+    "DOM_DATE_DEBUT_CONTRAT",
+    "DOM_DATE_FIN_CONTRAT",
+    "CTR_REFERENCE_DOMICILIATION",
+    "CTR_NOM_PRENOM_TRAVAILLEUR",
+    "CTS_NOM_PRENOM_TRAVAILLEUR",
+    "CTS_PART_TRANSFERABLE",
+    "CTS_SALAIRE_NET",
+    "CTS_DATE_DEBUT_VALIDITE_PERMIS",
+    "CTS_DATE_FIN_VALIDITE_PERMIS",
+    "TTR_NOM",
+    "TTR_PRENOM",
+    "TTR_DATE_DEBUT",
+    "TTR_DATE_FIN"
+  ],
+  "additional_critical_new_contract": [
+    "DOM_PART_TRANSFERABLE",
+    "DOM_MONTANT_TOTAL_DOMICILIE"
+  ],
+  "permitted_employers": "Referentiel géré séparément; le modèle ne contient pas de whitelist TOSYALI",
+  "max_minor_unit_digits": 2,
+  "reference_comparison": "Chiffres dans l'ordre puis DZD selon le notebook Partie 2 V15-A; la valeur documentaire originale reste obligatoire",
+  "carthagodom_required": [
+    "column_mapping_sha256",
+    "snapshot_sha256",
+    "record_id",
+    "reference_dom",
+    "compte_local",
+    "validation_agence_confirmee"
+  ],
+  "date_policy": "Aucun ajustement ni remplacement automatique des dates divergentes",
+  "amount_policy": "Decimal; aucune tolérance implicite sur montants, ni calcul de prorata automatique dans ce moteur",
+  "certification_policy": "Revue nominative, données vérifiées, aucune alerte bloquante ou à revoir, validation bancaire séparée"
+}

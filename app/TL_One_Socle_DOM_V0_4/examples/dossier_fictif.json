@@ -1,0 +1,252 @@
+{
+  "employeur_id": "EMP_SYNTHETIQUE",
+  "campagne_id": "DEMO_DOM_2026_01",
+  "document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "pipeline_version": "GENERIC_V15_A_FAST_STANDARDIZED_QWEN3_8_27B",
+  "type_dossier": "NOUVEAU_CONTRAT",
+  "documents": [
+    "ENGAGEMENT_DOMICILIATION",
+    "CONTRAT_TRAVAIL",
+    "CONTRAT_SPECIFIQUE",
+    "TITRE_TRAVAIL"
+  ],
+  "fields": {
+    "DOM_NOM_RAISON_SOCIAL_CLIENT": {
+      "raw": "NOM TEST",
+      "normalized": "NOM TEST",
+      "page": 1,
+      "document_type": "ENGAGEMENT_DOMICILIATION",
+      "needs_review": false,
+      "evidence_text": null,
+      "confidence_score": 98
+    },
+    "DOM_COMPTE_LOCAL": {
+      "raw": "02700073101107560010",
+      "normalized": "02700073101107560010",
+      "page": 1,
+      "document_type": "ENGAGEMENT_DOMICILIATION",
+      "needs_review": false,
+      "evidence_text": null,
+      "confidence_score": 98
+    },
+    "DOM_DATE_DEBUT_CONTRAT": {
+      "raw": "01/07/2026",
+      "normalized": "01/07/2026",
+      "page": 1,
+      "document_type": "ENGAGEMENT_DOMICILIATION",
+      "needs_review": false,
+      "evidence_text": null,
+      "confidence_score": 98
+    },
+    "DOM_DATE_FIN_CONTRAT": {
+      "raw": "30/06/2028",
+      "normalized": "30/06/2028",
+      "page": 1,
+      "document_type": "ENGAGEMENT_DOMICILIATION",
+      "needs_review": false,
+      "evidence_text": null,
+      "confidence_score": 98
+    },
+    "DOM_PART_TRANSFERABLE": {
+      "raw": "350000.00",
+      "normalized": "350000.00",
+      "page": 1,
+      "document_type": "ENGAGEMENT_DOMICILIATION",
+      "needs_review": false,
+      "evidence_text": null,
+      "confidence_score": 98
+    },
+    "DOM_MONTANT_TOTAL_DOMICILIE": {
+      "raw": "8400000.00",
+      "normalized": "8400000.00",
+      "page": 1,
+      "document_type": "ENGAGEMENT_DOMICILIATION",
+      "needs_review": false,
+      "evidence_text": null,
+      "confidence_score": 98
+    },
+    "CTR_REFERENCE_DOMICILIATION": {
+      "raw": "123456|2026|DZD",
+      "normalized": "123456|2026|DZD",
+      "page": 2,
+      "document_type": "CONTRAT_TRAVAIL",
+      "needs_review": false,
+      "evidence_text": null,
+      "confidence_score": 98
+    },
+    "CTR_NOM_PRENOM_TRAVAILLEUR": {
+      "raw": "NOM TEST",
+      "normalized": "NOM TEST",
+      "page": 2,
+      "document_type": "CONTRAT_TRAVAIL",
+      "needs_review": false,
+      "evidence_text": null,
+      "confidence_score": 98
+    },
+    "CTR_DATE_DEBUT_VALIDITE_PERMIS": {
+      "raw": "01/07/2026",
+      "normalized": "01/07/2026",
+      "page": 2,
+      "document_type": "CONTRAT_TRAVAIL",
+      "needs_review": false,
+      "evidence_text": null,
+      "confidence_score": 98
+    },
+    "CTR_DATE_FIN_VALIDITE_PERMIS": {
+      "raw": "30/06/2028",
+      "normalized": "30/06/2028",
+      "page": 2,
+      "document_type": "CONTRAT_TRAVAIL",
+      "needs_review": false,
+      "evidence_text": null,
+      "confidence_score": 98
+    },
+    "CTS_NOM_PRENOM_TRAVAILLEUR": {
+      "raw": "NOM TEST",
+      "normalized": "NOM TEST",
+      "page": 3,
+      "document_type": "CONTRAT_SPECIFIQUE",
+      "needs_review": false,
+      "evidence_text": null,
+      "confidence_score": 98
+    },
+    "CTS_PART_TRANSFERABLE": {
+      "raw": "350000.00",
+      "normalized": "350000.00",
+      "page": 3,
+      "document_type": "CONTRAT_SPECIFIQUE",
+      "needs_review": false,
+      "evidence_text": null,
+      "confidence_score": 98
+    },
+    "CTS_SALAIRE_NET": {
+      "raw": "400000.00",
+      "normalized": "400000.00",
+      "page": 3,
+      "document_type": "CONTRAT_SPECIFIQUE",
+      "needs_review": false,
+      "evidence_text": null,
+      "confidence_score": 98
+    },
+    "CTS_DATE_DEBUT_VALIDITE_PERMIS": {
+      "raw": "01/07/2026",
+      "normalized": "01/07/2026",
+      "page": 3,
+      "document_type": "CONTRAT_SPECIFIQUE",
+      "needs_review": false,
+      "evidence_text": null,
+      "confidence_score": 98
+    },
+    "CTS_DATE_FIN_VALIDITE_PERMIS": {
+      "raw": "30/06/2028",
+      "normalized": "30/06/2028",
+      "page": 3,
+      "document_type": "CONTRAT_SPECIFIQUE",
+      "needs_review": false,
+      "evidence_text": null,
+      "confidence_score": 98
+    },
+    "TTR_NOM": {
+      "raw": "NOM",
+      "normalized": "NOM",
+      "page": 4,
+      "document_type": "TITRE_TRAVAIL",
+      "needs_review": false,
+      "evidence_text": null,
+      "confidence_score": 98
+    },
+    "TTR_PRENOM": {
+      "raw": "TEST",
+      "normalized": "TEST",
+      "page": 4,
+      "document_type": "TITRE_TRAVAIL",
+      "needs_review": false,
+      "evidence_text": null,
+      "confidence_score": 98
+    },
+    "TTR_DATE_DEBUT": {
+      "raw": "01/07/2026",
+      "normalized": "01/07/2026",
+      "page": 4,
+      "document_type": "TITRE_TRAVAIL",
+      "needs_review": false,
+      "evidence_text": null,
+      "confidence_score": 98
+    },
+    "TTR_DATE_FIN": {
+      "raw": "30/06/2028",
+      "normalized": "30/06/2028",
+      "page": 4,
+      "document_type": "TITRE_TRAVAIL",
+      "needs_review": false,
+      "evidence_text": null,
+      "confidence_score": 98
+    },
+    "CTR_SIGNATURE_TRAVAILLEUR_PRESENTE": {
+      "raw": "présent",
+      "normalized": true,
+      "page": 2,
+      "document_type": "CONTRAT_TRAVAIL",
+      "needs_review": false,
+      "evidence_text": null,
+      "confidence_score": 98
+    },
+    "CTR_SIGNATURE_EMPLOYEUR_PRESENTE": {
+      "raw": "présent",
+      "normalized": true,
+      "page": 2,
+      "document_type": "CONTRAT_TRAVAIL",
+      "needs_review": false,
+      "evidence_text": null,
+      "confidence_score": 98
+    },
+    "CTR_CACHET_EMPLOYEUR_PRESENT": {
+      "raw": "présent",
+      "normalized": true,
+      "page": 2,
+      "document_type": "CONTRAT_TRAVAIL",
+      "needs_review": false,
+      "evidence_text": null,
+      "confidence_score": 98
+    },
+    "CTS_SIGNATURE_TRAVAILLEUR_PRESENTE": {
+      "raw": "présent",
+      "normalized": true,
+      "page": 3,
+      "document_type": "CONTRAT_SPECIFIQUE",
+      "needs_review": false,
+      "evidence_text": null,
+      "confidence_score": 98
+    },
+    "CTS_SIGNATURE_EMPLOYEUR_PRESENTE": {
+      "raw": "présent",
+      "normalized": true,
+      "page": 3,
+      "document_type": "CONTRAT_SPECIFIQUE",
+      "needs_review": false,
+      "evidence_text": null,
+      "confidence_score": 98
+    },
+    "CTS_CACHET_EMPLOYEUR_PRESENT": {
+      "raw": "présent",
+      "normalized": true,
+      "page": 3,
+      "document_type": "CONTRAT_SPECIFIQUE",
+      "needs_review": false,
+      "evidence_text": null,
+      "confidence_score": 98
+    }
+  },
+  "carthago_dom": {
+    "employeur_id": "EMP_SYNTHETIQUE",
+    "snapshot_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "record_id": "ROW_001",
+    "reference_dom": "123456/2026 DZD",
+    "compte_local": "02700073101107560010",
+    "montant_total": "8400000.00",
+    "nom_complet": "NOM TEST",
+    "validation_agence_confirmee": true,
+    "match_cardinality": 1,
+    "column_mapping_sha256": "9ae9e19c94bdc2d797eed2029895f1db1338ce6a455a41e47f2b77943f791507"
+  }
+}
