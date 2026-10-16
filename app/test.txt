@@ -1,1 +1,17 @@
-app
+python - <<'PY'
+import json
+
+with open("schemas/catalogue_champs_v15a.json", encoding="utf-8") as f:
+    d = json.load(f)
+
+for key in ["documents", "fields", "carthago_dom"]:
+    value = d.get(key)
+    print(f"\n{key} : {type(value).__name__}")
+
+    if isinstance(value, dict):
+        print("Clés :", list(value.keys())[:30])
+    elif isinstance(value, list):
+        print("Nombre d'éléments :", len(value))
+        if value:
+            print("Premier élément :", str(value[0])[:500])
+PY
