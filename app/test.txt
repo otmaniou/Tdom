@@ -1,57 +1,39 @@
 python - <<'PY'
-import json
+import pandas as pd
 
-with open("schemas/catalogue_champs_v15a.json", encoding="utf-8") as f:
-    d = json.load(f)
+f = "data/Demande_Predomiciliation.xlsx"
+df = pd.read_excel(f, dtype=object)
 
-for key in ["documents", "fields", "carthago_dom"]:
-    value = d.get(key)
-    print(f"\n{key} : {type(value).__name__}")
-
-    if isinstance(value, dict):
-        print("Clés :", list(value.keys())[:30])
-    elif isinstance(value, list):
-        print("Nombre d'éléments :", len(value))
-        if value:
-            print("Premier élément :", str(value[0])[:500])
+for col in df.columns:
+    if "decision" in str(col).lower():
+        print("Colonne :", repr(col))
+        print("Type :", df[col].dtype)
+        print("Exemples :", df[col].dropna().head(10).tolist())
 PY
 
 
 
-cd /mnt/TL_One_Socle_DOM_V0_4
+import pandas as pd
+import unicodedata
 
-python - <<'PY'
-import json
-from pathlib import Path
+def normaliser_colonne(valeur):
+    texte = unicodedata.normalize("NFKC", str(valeur))
+    return " ".join(texte.replace("\xa0", " ").split()).casefold()
 
-p = Path("schemas/catalogue_champs_v15a.json")
-d = json.loads(p.read_text(encoding="utf-8"))
+def trouver_colonne(df, nom):
+    cible = normaliser_colonne(nom)
+    for col in df.columns:
+        if normaliser_colonne(col) == cible:
+            return col
+    return None
 
-print("Clés racines :", list(d.keys()))
-for k, v in d.items():
-    print(k, ":", type(v).__name__)
-PY
+col_date = trouver_colonne(df, "Request Decision Date")
 
-
-
-cd /mnt/TL_One_Socle_DOM_V0_4
-
-python -m unittest discover -s tests -v
-
-
-
-
-
-
-python - <<'PY'
-import json
-
-with open("schemas/catalogue_champs_v15a.json", encoding="utf-8") as f:
-    d = json.load(f)
-
-print("Source :", d["source_notebook"])
-print("Nombre de champs :", d["nombre_champs"])
-
-for document, champs in d["champs_par_type_document"].items():
-    print(document, ":", len(champs), "champs")
-PY
+if col_date is not None:
+    df["date_decision_normalisee"] = pd.to_datetime(
+        df[col_date],
+        dayfirst=True,
+        errors="coerce"
+    )
+else:
+    print("ALERTE : colonne Request Decision Date introuvable")
