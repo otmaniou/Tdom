@@ -1,0 +1,12 @@
+{
+  "description": "Libellés EXACTS du fichier Prédom. À modifier ici si les en-têtes réels diffèrent.",
+  "header_row": 1,
+  "sheet_name": null,
+  "colonnes": {
+    "client_id": "Identifiant client",
+    "dom_reference": "Numéro de domiciliation",
+    "status": "Statut",
+    "decision_date": "Request Decision Date"
+  },
+  "statuts_eligibles": ["Domicilié", "Accord Prédom"]
+}

@@ -1,0 +1,8 @@
+Identifiant client;Numéro de domiciliation;Statut;Request Decision Date;Référence
+CLI00001;DOM-2024-001;Domicilié;15/06/2024;PRE-01
+CLI00001;DOM-2026-002;Accord Prédom;12/10/2026;PRE-02
+CLI00002;DOM-2026-003;Rejeté;11/10/2026;PRE-03
+CLI00003;DOM-2026-004;Domicilié;07/10/2026;PRE-04
+CLI00003;DOM-2026-005;Accord Prédom;07/10/2026;PRE-05
+CLI00004;DOM-2026-006;Accord Prédom;date inconnue;PRE-06
+CLI00005;DOM-2026-007;Domicilié;08/10/2026;PRE-07
