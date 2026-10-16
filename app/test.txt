@@ -15,3 +15,19 @@ for key in ["documents", "fields", "carthago_dom"]:
         if value:
             print("Premier élément :", str(value[0])[:500])
 PY
+
+
+
+cd /mnt/TL_One_Socle_DOM_V0_4
+
+python - <<'PY'
+import json
+from pathlib import Path
+
+p = Path("schemas/catalogue_champs_v15a.json")
+d = json.loads(p.read_text(encoding="utf-8"))
+
+print("Clés racines :", list(d.keys()))
+for k, v in d.items():
+    print(k, ":", type(v).__name__)
+PY
