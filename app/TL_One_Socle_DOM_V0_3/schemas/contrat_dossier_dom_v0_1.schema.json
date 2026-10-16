@@ -1,0 +1,170 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Dossier domiciliation vérifiable TL-One (adaptateur de sortie OCR)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "employeur_id",
+    "campagne_id",
+    "document_sha256",
+    "pipeline_version",
+    "type_dossier",
+    "documents",
+    "fields",
+    "carthago_dom"
+  ],
+  "properties": {
+    "employeur_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "campagne_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "document_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "pipeline_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "type_dossier": {
+      "enum": [
+        "NOUVEAU_CONTRAT",
+        "AUGMENTATION",
+        "RENOUVELLEMENT",
+        "INDETERMINE"
+      ]
+    },
+    "documents": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string"
+      }
+    },
+    "fields": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/champ"
+      }
+    },
+    "carthago_dom": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "column_mapping_sha256",
+        "snapshot_sha256",
+        "record_id",
+        "reference_dom",
+        "compte_local",
+        "validation_agence_confirmee",
+        "employeur_id",
+        "nom_complet"
+      ],
+      "properties": {
+        "snapshot_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "record_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reference_dom": {
+          "type": "string",
+          "minLength": 1
+        },
+        "compte_local": {
+          "type": "string",
+          "minLength": 1
+        },
+        "montant_total": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "validation_agence_confirmee": {
+          "type": "boolean"
+        },
+        "match_cardinality": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "employeur_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "nom_complet": {
+          "type": "string",
+          "minLength": 1
+        },
+        "column_mapping_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "champ": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "raw",
+        "normalized",
+        "page",
+        "document_type",
+        "needs_review"
+      ],
+      "properties": {
+        "raw": {
+          "type": [
+            "string",
+            "number",
+            "boolean",
+            "null"
+          ]
+        },
+        "normalized": {
+          "type": [
+            "string",
+            "number",
+            "boolean",
+            "null"
+          ]
+        },
+        "page": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "document_type": {
+          "type": "string"
+        },
+        "needs_review": {
+          "type": "boolean"
+        },
+        "evidence_text": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "confidence_score": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 100
+        }
+      }
+    }
+  }
+}

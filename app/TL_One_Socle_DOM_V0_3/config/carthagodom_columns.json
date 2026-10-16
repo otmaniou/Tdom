@@ -1,0 +1,62 @@
+{
+  "version": "CARTHAGODOM_COLS_V0_3",
+  "description": "Source unique des libellés exacts de la fiche CarthagoDom, disposition verticale A/B observée. Chaque libellé est défini UNE SEULE FOIS entre colonnes et libelles_supplementaires. Pas d’alias. Certification impossible tant que compte et validation agence ne sont pas prouvés.",
+  "colonnes": {
+    "client_code": "Client",
+    "nom_complet": "Nom complet/Raison social",
+    "reference_dom": "Numéro de domiciliation",
+    "compte_local": null,
+    "montant_total": "Montant final",
+    "statut_domiciliation": null
+  },
+  "valeurs_statut_valide": [],
+  "champs_obligatoires_pour_certification": [
+    "client_code",
+    "nom_complet",
+    "reference_dom",
+    "montant_total",
+    "compte_local",
+    "statut_domiciliation"
+  ],
+  "notes": {
+    "montant_total": "Source exacte = Montant final. Distinct de Montant initial et Total Financing Settlement Amount. Les montants doivent être revérifiés sur justificatifs.",
+    "compte_local": "Aucun champ de compte bancaire complet visible dans cette fiche. Ne pas assimiler Client au compte.",
+    "statut_domiciliation": "Aucun statut de validation MOCI explicite visible. Situation d’apurement et Dom Documents Received ne prouvent pas la validation.",
+    "nom_complet": "Libellé lu sur capture = Nom complet/Raison social (sans e final). Confirmer par fichier Excel original.",
+    "reference_dom": "Numéro de domiciliation (libellé fixe). Compare au tampon CTR indépendamment du Qwen.",
+    "code_bic": "Code bic ; distinct de l’identifiant de domiciliation."
+  },
+  "format_source_observe": {
+    "type": "fiche_verticale",
+    "colonne_libelles": "A",
+    "colonne_valeurs": "B",
+    "preuve": "Capture écran, structure XLSX à confirmer"
+  },
+  "libelles_supplementaires": {
+    "agence": "Agence",
+    "date_domiciliation": "Date domiciliation",
+    "type_operation": "Type opération",
+    "mode_reglement": "Mode de règlement",
+    "montant_initial": "Montant initial",
+    "total_financing_settlement_amount": "Total Financing Settlement Amount",
+    "devise": "Devise",
+    "nature_operation": "Nature opération",
+    "description": "Description",
+    "situation_apurement": "Situation d'apurement",
+    "dom_documents_received": "Dom Documents Received",
+    "docs_received_date": "Docs Received Date",
+    "regime": "Régime",
+    "accord_pre_dom": "Accord pré-dom",
+    "date_declaration": "Date déclaration",
+    "date_apurement": "Date apurement",
+    "last_expedition_date": "Last Expedition Date",
+    "invoices_date": "Invoices Date",
+    "invoices_reference": "Invoices Reference",
+    "deferred_period": "deferredPeriod",
+    "dom_amount_tolerance": "Dom Amount Tolerance",
+    "docs_received_comment": "Docs Received Comment",
+    "name": "Name",
+    "last_financing_settlement_date": "Last Financing Settlement Date",
+    "code_bic": "Code bic"
+  }
+}
