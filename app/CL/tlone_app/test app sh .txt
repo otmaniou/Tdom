@@ -1,0 +1,16 @@
+cd /mnt/code/tlone_app
+
+# 1. Mettre la dernière version de app.sh (empreinte attendue : 5f233173)
+md5sum app.sh | cut -c1-8
+
+# 2. Retirer les fins de ligne Windows de tous les scripts shell
+sed -i 's/\r$//' app.sh domino/app.sh.racine
+file app.sh                     # ne doit PAS afficher "with CRLF line terminators"
+
+# 3. Empêcher que ça se reproduise : Git forcera le format Linux pour les .sh
+cd /mnt/code
+printf '*.sh text eol=lf\n' >> .gitattributes
+
+git add .gitattributes tlone_app/app.sh
+git commit -m "app.sh : fins de ligne Linux"
+git push
