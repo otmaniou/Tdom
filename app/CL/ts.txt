@@ -175,3 +175,26 @@ dws-venv-export tlone-tf5
 dws-dockerfile-init
 cp /mnt/code/tlone-tf4.yaml /mnt/code/tlone-tf5.yaml /mnt/dockerfile/desired-packages/
 dws-dockerfile-create
+
+
+
+
+
+
+
+
+
+
+   cd /mnt/code
+   rm -rf tlone_app
+   mkdir tlone_app && cd tlone_app
+   unzip -q ../tlone_app_v1.zip && rm ../tlone_app_v1.zip
+   ls domino/                    # check_env.py  PROCEDURE_TLONE.md  ...
+   $TF4 -m pytest -q tests       # 24 passed
+
+
+
+   TLONE_DOM_POST_PYTHON=$TF4 TLONE_DOM_EXTRACT_PYTHON=$TF5 TLONE_OV_EXTRACT_PYTHON=$TF4 \
+   TLONE_DATA_ROOT=/mnt/data/<ton dataset> \
+   $TF4 domino/check_env.py
+
