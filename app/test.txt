@@ -246,3 +246,17 @@ grep -n "envs//\|kernels//\|ipykernel install" Dockerfile.tlone2
 grep -n "name: tlone" Dockerfile.tlone2
 
 cat /mnt/dockerfile/Dockerfile.tlone2
+
+
+
+
+
+
+
+
+cd /mnt/dockerfile
+sed -i 's#conda activate " >> /home/domino/.bashrc#conda activate tlone-tf4" >> /home/domino/.bashrc#' Dockerfile.tlone2
+grep -n "conda activate" Dockerfile.tlone2
+
+
+TLONE_DOM_EXTRACT_PYTHON=/opt/conda/envs/tlone-tf5/bin/python TLONE_OV_EXTRACT_PYTHON=/opt/conda/envs/tlone-tf4/bin/python TLONE_DOM_POST_PYTHON=/opt/conda/envs/tlone-tf4/bin/python TLONE_DATA_ROOT=/mnt/data/document_pipeline /opt/conda/envs/tlone-tf4/bin/python /mnt/code/tlone_app/domino/check_env.py
