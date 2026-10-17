@@ -1,1 +1,15 @@
+import os, requests
 
+host = os.environ["DOMINO_API_HOST"]
+proj = os.environ["DOMINO_PROJECT_ID"]
+
+try:  # Domino récent : token local
+    tok = requests.get("http://localhost:8899/access-token").text
+    h = {"Authorization": f"Bearer {tok}"}
+except Exception:  # anciennes versions : clé API
+    h = {"X-Domino-Api-Key": os.environ["DOMINO_USER_API_KEY"]}
+
+r = requests.get(f"{host}/v4/projects/{proj}/hardwareTiers", headers=h)
+for t in r.json():
+    ht = t.get("hardwareTier", t)
+    print(ht.get("id"), "|", ht.get("name"))
