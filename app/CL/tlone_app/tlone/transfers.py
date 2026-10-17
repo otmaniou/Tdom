@@ -124,10 +124,19 @@ def parse_periode(v) -> tuple[str | None, str | None]:
 
 
 def periode_from_filename(name: str) -> tuple[str | None, str | None]:
-    m = re.search(r"(20\d{2})(0[1-9]|1[0-2])(P[12])?$", Path(str(name)).stem.upper())
-    if not m:
-        return None, None
-    return f"{m.group(1)}-{m.group(2)}", m.group(3)
+    """Formats observés : ...-202603P1, ...-202606-OV-PART-2_NOM, ...-042026P2, ...-04 P1."""
+    stem = Path(str(name)).stem.upper()
+    part = None
+    mp = re.search(r"(?:P|PART)[\s_-]*([12])(?![0-9])", stem)
+    if mp:
+        part = f"P{mp.group(1)}"
+    m = re.search(r"(?<![0-9])(20\d{2})(0[1-9]|1[0-2])(?![0-9])", stem)      # AAAAMM
+    if m:
+        return f"{m.group(1)}-{m.group(2)}", part
+    m = re.search(r"(?<![0-9])(0[1-9]|1[0-2])(20\d{2})(?![0-9])", stem)      # MMAAAA
+    if m:
+        return f"{m.group(2)}-{m.group(1)}", part
+    return None, part
 
 
 def periode_label(mois: str | None, part: str | None) -> str | None:
