@@ -224,3 +224,25 @@ grep -n "^name:" Dockerfile.tlone
 
 
 cat /mnt/dockerfile/Dockerfile.tlone
+
+
+
+
+
+
+cd /mnt/dockerfile
+grep -n "envs//\|kernels//" Dockerfile.tlone          # voir les lignes concernées
+
+awk '
+/kernels\/\/kernel.json/ { print "RUN /opt/conda/envs/tlone-tf4/bin/python -m ipykernel install --user --name tlone-tf4 --display-name tlone-tf4 && /opt/conda/envs/tlone-tf5/bin/python -m ipykernel install --user --name tlone-tf5 --display-name tlone-tf5"; next }
+{ print }
+' Dockerfile.tlone > Dockerfile.tlone2
+
+grep -n "envs//\|kernels//\|ipykernel install" Dockerfile.tlone2
+
+
+
+
+grep -n "name: tlone" Dockerfile.tlone2
+
+cat /mnt/dockerfile/Dockerfile.tlone2
