@@ -66,3 +66,7 @@ git add app.sh .gitattributes tlone_app_v1/app.sh
 git status        # aucun fichier Dockerfile* ne doit apparaître
 git commit -m "app.sh : fins de ligne LF + python tlone-tf4"
 git push
+
+
+
+  /opt/conda/envs/tlone-tf4/bin/python -c "import streamlit, fitz, nbclient, openpyxl; print('OK')"
