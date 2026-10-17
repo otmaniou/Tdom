@@ -1,1 +1,99 @@
 
+
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ============================================================
+# TL-ONE V1.0 — LANCEMENT STREAMLIT SUR DOMINO
+# ============================================================
+
+# 1. Répertoires
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
+cd "$PROJECT_ROOT"
+
+echo "============================================"
+echo "       TL-ONE V1.0 — DOMINO APP"
+echo "============================================"
+echo "Projet : $PROJECT_ROOT"
+echo "Application : $SCRIPT_DIR/app_v10.py"
+
+# 2. Environnement Python YaRisk
+PYTHON="/opt/conda/envs/yarisk_demo/bin/python"
+
+if [ ! -x "$PYTHON" ]; then
+    echo "ERREUR : environnement yarisk_demo introuvable."
+    echo "Chemin attendu : $PYTHON"
+    echo "Vérifier l'environnement sélectionné pour Domino App."
+    exit 1
+fi
+
+echo "Python utilisé : $PYTHON"
+
+# 3. Vérifier les dépendances
+"$PYTHON" -m streamlit --version
+
+"$PYTHON" -c \
+    "import streamlit, pandas, fitz, openpyxl; print('Dépendances principales OK')"
+
+# 4. Vérifier le fichier de l'application
+if [ ! -f "$SCRIPT_DIR/app_v10.py" ]; then
+    echo "ERREUR : app_v10.py introuvable."
+    exit 1
+fi
+
+# 5. Vérifier les résultats V1.0
+RESULT_FILE="$PROJECT_ROOT/resultats/v10/comparatif_dossiers_v10.json"
+
+if [ ! -f "$RESULT_FILE" ]; then
+    echo "AVERTISSEMENT : résultats V1.0 absents."
+    echo "Fichier attendu : $RESULT_FILE"
+    echo "L'application pourra démarrer, mais les dossiers"
+    echo "ne seront pas disponibles tant que les résultats"
+    echo "n'auront pas été générés."
+else
+    echo "Résultats V1.0 trouvés."
+fi
+
+# 6. Configuration du serveur
+# Port 8888 : Domino App publiée
+# Possibilité de remplacer avec PORT=8911 pour les tests
+PORT="${PORT:-8888}"
+
+echo "Démarrage Streamlit sur le port $PORT"
+
+# 7. Démarrage de l'application
+exec "$PYTHON" -m streamlit run "$SCRIPT_DIR/app_v10.py" \
+    --server.address 0.0.0.0 \
+    --server.port "$PORT" \
+    --server.headless true \
+    --server.fileWatcherType none \
+    --browser.gatherUsageStats false \
+    -- --root "$PROJECT_ROOT"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+cd /mnt/TL_One_Test_Predom_V0_6/TL_One_V1_0_Comparatif
+
+chmod +x app_v10.sh
+
+PORT=8911 ./app_v10.sh
