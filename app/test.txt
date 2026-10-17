@@ -260,3 +260,13 @@ grep -n "conda activate" Dockerfile.tlone2
 
 
 TLONE_DOM_EXTRACT_PYTHON=/opt/conda/envs/tlone-tf5/bin/python TLONE_OV_EXTRACT_PYTHON=/opt/conda/envs/tlone-tf4/bin/python TLONE_DOM_POST_PYTHON=/opt/conda/envs/tlone-tf4/bin/python TLONE_DATA_ROOT=/mnt/data/document_pipeline /opt/conda/envs/tlone-tf4/bin/python /mnt/code/tlone_app/domino/check_env.py
+
+
+
+TLONE_DOM_EXTRACT_PYTHON=/opt/conda/envs/tlone-tf5/bin/python TLONE_OV_EXTRACT_PYTHON=/opt/conda/envs/tlone-tf4/bin/python TLONE_DOM_POST_PYTHON=/opt/conda/envs/tlone-tf4/bin/python TLONE_DATA_ROOT=/mnt/data/document_pipeline /opt/conda/envs/tlone-tf4/bin/python /mnt/code/tlone_app/domino/check_env.py
+
+
+cd /mnt/code/tlone_app
+/opt/conda/envs/tlone-tf4/bin/python run_step.py dom_post    --max 2
+/opt/conda/envs/tlone-tf5/bin/python run_step.py dom_extract --max 2
+/opt/conda/envs/tlone-tf4/bin/python run_step.py ov_extract  --max 2
