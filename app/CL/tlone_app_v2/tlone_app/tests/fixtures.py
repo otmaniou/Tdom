@@ -120,6 +120,7 @@ def _fields_for(d: dict) -> dict:
     ref = d.get("CTS_REFERENCE_DOCUMENT") or "CT-2026-0099"
     f = {
         "DOM_NOM_RAISON_SOCIAL_CLIENT": nom, "DOM_COMPTE_LOCAL": compte, "DOM_NUMERO_CONTRAT": ref,
+        "DOM_AGENCE_DOMICILIATAIRE": "AGENCE ORAN",
         "DOM_DUREE_CONTRAT_MOIS": str(mois), "DOM_DATE_DEBUT_CONTRAT": deb, "DOM_DATE_FIN_CONTRAT": fin,
         "DOM_SALAIRE_NET_MENSUEL": sal, "DOM_PART_TRANSFERABLE": part, "DOM_TAUX_TRANSFERABLE": "95",
         "DOM_MONTANT_TOTAL_DOMICILIE": f"{float(part) * mois:.2f}", "DOM_DATE_SIGNATURE": deb,
@@ -253,6 +254,12 @@ def build(root: Path) -> Paths:
         pd.DataFrame([{"FICHIER": "KAYA_AHMET_CNT.pdf", "CONTROLE": "IDENTITE_CTS_CTR", "STATUT": "OK"}]) \
             .to_excel(w, sheet_name="CONTROLES_COHERENCE", index=False)
     champs_detail().to_csv(p.fields_csv, index=False, encoding="utf-8-sig")
+    # export CarthagoDom avec les en-têtes réels (18/10/2026), sans le client DEMIR (non trouvé)
+    pd.DataFrame([{"Accord pré-dom": None, "Agence": "AGENCE ORAN" if d["FICHIER"] != "CELIK_MEHMET_CNT.pdf"
+                   else "AGENCE ARZEW", "Client": d["SIEGE_RACINE"], "Devise": "DZD",
+                   "Nom complet": d["CTS_NOM_PRENOM_TRAVAILLEUR"], "Name": d["CTS_NOM_PRENOM_TRAVAILLEUR"],
+                   "Numéro de domiciliation": d["NUMERO_DOMICILIATION_PROPOSE"]}
+                  for d in DOSSIERS if d["FICHIER"] != "DEMIR_ALI_CNT.pdf"]).to_excel(p.carthago_xlsx, index=False)
     carthago_match().to_csv(p.carthago_match_csv, index=False, encoding="utf-8-sig")
     pd.DataFrame({"ANNEE_AUGMENTATION": [2026], "MOIS_AUGMENTATION": [4]}).to_excel(p.param_aug_xlsx, index=False)
     write_v26(p.tr_out / "audit_transferts_20261016_1200.xlsx", TRANSFERTS)

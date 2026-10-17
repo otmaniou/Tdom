@@ -68,6 +68,7 @@ variables, vérifications, publication de l'App, premier parcours).
 | `TLONE_<ETAPE>_TIER` / `_ENV` / `_PYTHON` | surcharge par étape (`DOM_EXTRACT`, `DOM_POST`, `OV_EXTRACT`) | tier commun / `TLONE_ENV_ID` / env conda de l'étape |
 | `TLONE_APP_PYTHON` | interpréteur de l'app | `/opt/conda/envs/tlone-tf4/bin/python` |
 | `TLONE_MODEL_DOM` / `TLONE_MODEL_OV` | remplace `MODEL_PATH` du notebook | chemin du notebook |
+| `TLONE_CARTHAGO_CLIENT_COL` / `_NAME_COL` / `_DOM_REF_COL` | nom exact d'une colonne de l'export CarthagoDom si la détection automatique se trompe | détection (`tlone/carthago.py`) |
 | `TLONE_PLAFOND_PCT_NET` | plafond % du net | `0.95` |
 | `TLONE_PROVISION_MAJORATION` | majoration provision | `5000` |
 | `TLONE_AUTORISATION_JOURS` | validité autorisation | `45` |
@@ -92,6 +93,8 @@ Sur une machine vast.ai, même commande : les étapes GPU tournent en sous-proce
 Le fichier `.ipynb` n'est jamais réécrit ; le notebook exécuté est archivé dans `runs/`.
 - `/mnt/data` → `TLONE_DATA_ROOT` (si différent) ; `MAX_PDFS` / `MAX_DOSSIERS` si « Limiter à N » ;
   `MODEL_PATH` si `TLONE_MODEL_*`.
+- Partie 2 : `CARTHAGO_NAME_COL` / `CARTHAGO_CLIENT_COL` / `CARTHAGO_DOM_REF_COL` remplacés par les
+  vrais en-têtes de l'export CarthagoDom (ex. « Nom complet » au lieu de « Nom complet/Raison sociale »).
 - `glob('*.pdf')` rendu insensible à la casse : les spécimens sont en `.PDF` et étaient ignorés sous Linux.
 - Partie 2 : l'autotest V5.3 contient le compte anonymisé `'ACCOUNT_EXAMPLE'`, qui fait échouer
   ses propres `assert` ; il est remplacé par deux RIB synthétiques qui redonnent exactement les

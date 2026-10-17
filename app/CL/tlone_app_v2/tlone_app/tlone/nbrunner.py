@@ -38,9 +38,18 @@ _SELFTEST_PATTERNS = [
 
 
 def patch_source(src: str, step: str, data_root: str, max_items: int | None,
-                 model_path: str | None) -> tuple[str, list[str]]:
+                 model_path: str | None, carthago_cols: dict | None = None) -> tuple[str, list[str]]:
     """Retourne (source patchée, liste des patchs appliqués)."""
     applied: list[str] = []
+    # Partie 2 : noms réels des colonnes de l'export CarthagoDom (détectés par tlone.carthago)
+    for var, k, default in (("CARTHAGO_CLIENT_COL", "client", "'Client'"),
+                            ("CARTHAGO_NAME_COL", "name", "'Nom complet/Raison sociale'"),
+                            ("CARTHAGO_DOM_REF_COL", "dom_ref", "None")):
+        col = (carthago_cols or {}).get(k)
+        old = f"{var} = {default}"
+        if col and old in src and json.dumps(col, ensure_ascii=False) != default.replace("'", '"'):
+            src = src.replace(old, f"{var} = {json.dumps(col, ensure_ascii=False)}")
+            applied.append(f"{var}={col}")
     if data_root and data_root.rstrip("/") != DEFAULT_ROOT:
         n = src.count(DEFAULT_ROOT)
         if n:
@@ -80,14 +89,14 @@ def patch_source(src: str, step: str, data_root: str, max_items: int | None,
 
 
 def prepare_notebook(nb_path: Path, step: str, data_root: str, max_items: int | None,
-                     model_path: str | None):
+                     model_path: str | None, carthago_cols: dict | None = None):
     import nbformat
     nb = nbformat.read(str(nb_path), as_version=4)
     all_applied: list[str] = []
     for cell in nb.cells:
         if cell.cell_type != "code":
             continue
-        new, applied = patch_source(cell.source, step, data_root, max_items, model_path)
+        new, applied = patch_source(cell.source, step, data_root, max_items, model_path, carthago_cols)
         cell.source = new
         all_applied.extend(applied)
     return nb, all_applied
@@ -139,7 +148,14 @@ def run(step: str, run_id: str | None = None, max_items: int | None = None,
     out_nb = s.paths.runs_dir / f"{run_id}.executed.ipynb"
 
     model = s.model_dom if step == "dom_extract" else s.model_ov if step == "ov_extract" else None
-    nb, applied = prepare_notebook(nb_path, step, str(s.paths.data_root), max_items, model or None)
+    cols = None
+    if step == "dom_post" and s.paths.carthago_xlsx.exists():
+        from . import carthago
+        try:
+            cols = carthago.detect(carthago.read_headers(s.paths.carthago_xlsx))
+        except Exception as exc:  # noqa: BLE001
+            print(f"[TL-One] lecture des en-têtes Carthago impossible : {exc!r}", flush=True)
+    nb, applied = prepare_notebook(nb_path, step, str(s.paths.data_root), max_items, model or None, cols)
     _write_status(status_path, run_id=run_id, step=step, status="RUNNING",
                   started_at=datetime.now().isoformat(timespec="seconds"),
                   notebook=nb_path.name, patches=applied, max_items=max_items)

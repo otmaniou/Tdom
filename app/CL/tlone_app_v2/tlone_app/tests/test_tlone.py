@@ -306,10 +306,37 @@ def test_preflight_carthago_entetes(tmp_path):
     from tlone import preflight
     good, bad = tmp_path / "ok.xlsx", tmp_path / "ko.xlsx"
     pd.DataFrame({"CLIENT ": ["07310104411"], "Nom complet / Raison sociale": ["X"]}).to_excel(good, index=False)
-    pd.DataFrame({"Code client": ["07310104411"], "Intitulé": ["X"]}).to_excel(bad, index=False)
+    pd.DataFrame({"Matricule": ["07310104411"], "Intitulé": ["X"]}).to_excel(bad, index=False)
     assert not preflight.blocking(preflight.check_carthago(good))
     ko = preflight.blocking(preflight.check_carthago(bad))
-    assert len(ko) == 2 and "Code client" in ko[0]["action"]
+    assert len(ko) == 2 and "Matricule" in ko[0]["action"]
+
+
+def test_carthago_entetes_reels_et_patch_partie2(tmp_path, monkeypatch):
+    """En-têtes de l'export CarthagoDom réel (18/10/2026) : la Partie 2 reçoit les bons noms de colonnes."""
+    from tlone import carthago, nbrunner, preflight
+    reel = ["Accord pré-dom", "Agence", "Client", "Code bic", "Date apurement", "Date domiciliation",
+            "Date déclaration", "Description", "Devise", "Dom Amount Tolerance", "Dom Documents Received",
+            "Docs Received Comment", "Docs Received Date", "Invoices Date", "Invoices Reference",
+            "Last Expedition Date", "Last Financing Settlement Date", "Mode de règlement", "Montant final",
+            "Montant initial", "Name", "Nature opération", "Nom complet", "Numéro de domiciliation"]
+    x = tmp_path / "Dossier de domiciliation.xlsx"
+    pd.DataFrame([{c: None for c in reel}]).to_excel(x, index=False)
+    c = carthago.detect(carthago.read_headers(x))
+    assert (c["client"], c["name"], c["dom_ref"], c["agence"]) == ("Client", "Nom complet", "Numéro de domiciliation", "Agence")
+    assert not preflight.blocking(preflight.check_carthago(x))
+    src = "CARTHAGO_CLIENT_COL = 'Client'\nCARTHAGO_NAME_COL = 'Nom complet/Raison sociale'\nCARTHAGO_DOM_REF_COL = None\n"
+    out, applied = nbrunner.patch_source(src, "dom_post", "/mnt/data", None, None, c)
+    assert 'CARTHAGO_NAME_COL = "Nom complet"' in out and 'CARTHAGO_DOM_REF_COL = "Numéro de domiciliation"' in out
+    assert "CARTHAGO_CLIENT_COL = 'Client'" in out and len(applied) == 2
+    monkeypatch.setenv("TLONE_CARTHAGO_NAME_COL", "Name")
+    assert carthago.detect(reel)["name"] == "Name"
+    # le vrai notebook Partie 2 contient bien les lignes patchées
+    import nbformat
+    nb = nbformat.read(str(load_settings().notebooks["dom_post"]), as_version=4)
+    full = "\n".join(cl.source for cl in nb.cells if cl.cell_type == "code")
+    out, applied = nbrunner.patch_source(full, "dom_post", "/mnt/data", None, None, c)
+    assert {"CARTHAGO_NAME_COL=Nom complet", "CARTHAGO_DOM_REF_COL=Numéro de domiciliation"} <= set(applied)
 
 
 def test_job_cmd_python_override():

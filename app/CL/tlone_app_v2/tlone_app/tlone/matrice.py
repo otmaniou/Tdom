@@ -341,6 +341,7 @@ class Lot:
     source: str = ""
     by_file: dict = field(default_factory=dict)
     champs_connus: set = field(default_factory=set)   # champs présents dans CHAMPS_DETAIL (Partie 2)
+    agences: dict = field(default_factory=dict)       # (client, n° DOM compact) -> agence (export Carthago)
 
 
 def _read(csv: Path, xlsx: Path, sheet: str) -> pd.DataFrame:
@@ -363,7 +364,33 @@ def load_lot(P) -> Lot:
     if not fld.empty and "FICHIER" in fld.columns:
         lot.by_file = {k: g for k, g in fld.groupby(fld["FICHIER"].astype(str))}
         lot.champs_connus = set(fld["CHAMP"].astype(str)) if "CHAMP" in fld.columns else set()
+    lot.agences = _agences_carthago(getattr(P, "carthago_xlsx", None))
     return lot
+
+
+def _agences_carthago(path) -> dict:
+    """Agence de chaque domiciliation, lue directement dans l'export CarthagoDom (absente du rapprochement Partie 2)."""
+    if not path or not Path(path).exists():
+        return {}
+    try:
+        from . import carthago
+        cols = carthago.detect(carthago.read_headers(Path(path)))
+        if not (cols["client"] and cols["agence"]):
+            return {}
+        out = {}
+        for _, df in pd.read_excel(path, sheet_name=None, dtype=str).items():
+            if cols["client"] not in df.columns or cols["agence"] not in df.columns:
+                continue
+            refs = df[cols["dom_ref"]] if cols["dom_ref"] in df.columns else pd.Series([None] * len(df))
+            for cl, ref, ag in zip(df[cols["client"]], refs, df[cols["agence"]]):
+                if is_blank(ag):
+                    continue
+                c = siege_racine(cl) or digits(cl)
+                out.setdefault((c, dom_ref_compact(ref) if not is_blank(ref) else None), str(ag).strip())
+                out.setdefault((c, None), str(ag).strip())
+        return out
+    except Exception:
+        return {}
 
 
 # ----------------------------------------------------------------------------- journal
@@ -473,7 +500,13 @@ def _carthago_row(lot: Lot, fichier: str) -> dict:
         ex = g[g["REFERENCE_EXACT_MATCH"].map(lambda v: str(v).strip().upper() in ("TRUE", "1", "VRAI"))]
         if not ex.empty:
             g = ex
-    return {k: (None if is_blank(v) else v) for k, v in g.iloc[0].to_dict().items()}
+    car = {k: (None if is_blank(v) else v) for k, v in g.iloc[0].to_dict().items()}
+    if lot.agences and not car.get("CARTHAGO_AGENCE"):
+        cl = siege_racine(car.get("CARTHAGO_CLIENT") or car.get("SIEGE_RACINE")) or digits(car.get("CARTHAGO_CLIENT"))
+        ref = car.get("CARTHAGO_NUM_DOM_RAW") or car.get("CARTHAGO_NUM_DOM_NORMALIZED")
+        car["CARTHAGO_AGENCE"] = (lot.agences.get((cl, dom_ref_compact(ref) if ref else None))
+                                  or lot.agences.get((cl, None)))
+    return car
 
 
 def _calc(name: str, row: dict) -> str | None:

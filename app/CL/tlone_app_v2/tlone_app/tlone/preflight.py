@@ -10,10 +10,8 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import subprocess
 import sys
-import unicodedata
 from datetime import datetime, timedelta
 from functools import lru_cache
 from pathlib import Path
@@ -35,8 +33,6 @@ MODEL_DEFAULT = {
     "dom_extract": "/domino/edv/modelhub/ModelHub-model-huggingface-Qwen/Qwen3.8-27B-FP8/main",
     "ov_extract": "/domino/edv/modelhub/ModelHub-model-huggingface-Qwen/Qwen2.5-VL-7B-Instruct/main",
 }
-CARTHAGO_CLIENT = ["Client"]
-CARTHAGO_NAME = ["Nom complet/Raison sociale"]
 PENDING_MAX_AGE = timedelta(hours=3)
 
 _PROBE = r'''
@@ -55,12 +51,6 @@ print(json.dumps(r))
 
 def _row(level, item, value="", hint=""):
     return {"niveau": level, "contrôle": item, "valeur": str(value), "action": hint}
-
-
-def _key(v) -> str:
-    s = unicodedata.normalize("NFKD", str(v))
-    s = "".join(c for c in s if not unicodedata.combining(c)).upper()
-    return re.sub(r"\s+", " ", re.sub(r"[^A-Z0-9]+", " ", s)).strip()
 
 
 def probe_python(py: str, modules: list[str]) -> dict | None:
@@ -153,21 +143,23 @@ def check_general(s: Settings) -> list[dict]:
 
 
 def check_carthago(path: Path) -> list[dict]:
-    """Reproduit la détection de colonnes de la Partie 2 (sinon elle échoue)."""
+    """Mêmes règles que la Partie 2, avec la détection tolérante des en-têtes (tlone.carthago)."""
+    from . import carthago
     try:
-        import pandas as pd
-        cols = set()
-        for sh, df in pd.read_excel(path, sheet_name=None, nrows=5, dtype=str).items():
-            cols |= {str(c) for c in df.columns}
+        headers = carthago.read_headers(path)
     except Exception as exc:
         return [_row(KO, "Export CarthagoDom", path.name, f"Illisible : {exc}")]
-    keys = {_key(c) for c in cols}
-    rows = []
-    for label, wanted in (("Colonne Carthago « Client »", CARTHAGO_CLIENT),
-                          ("Colonne Carthago « Nom complet/Raison sociale »", CARTHAGO_NAME)):
-        found = any(_key(w) in keys for w in wanted)
-        rows.append(_row(OK if found else KO, label, "trouvée" if found else "absente",
-                         "" if found else "En-têtes lus : " + " | ".join(sorted(cols))[:400]))
+    c = carthago.detect(headers)
+    lus = "En-têtes lus : " + " | ".join(headers)
+    rows = [
+        _row(OK if c["client"] else KO, "Colonne Carthago « Client »", c["client"] or "absente",
+             "" if c["client"] else lus + " → TLONE_CARTHAGO_CLIENT_COL"),
+        _row(OK if c["name"] else KO, "Colonne Carthago « Nom complet/Raison sociale »", c["name"] or "absente",
+             "" if c["name"] else lus + " → TLONE_CARTHAGO_NAME_COL"),
+        _row(OK if c["dom_ref"] else WARN, "Colonne Carthago « N° de domiciliation »", c["dom_ref"] or "absente",
+             "" if c["dom_ref"] else "Sans elle, aucun n° de domiciliation ne sera proposé. " + lus
+             + " → TLONE_CARTHAGO_DOM_REF_COL"),
+    ]
     return rows
 
 
