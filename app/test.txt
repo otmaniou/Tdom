@@ -145,3 +145,28 @@ cd /mnt/TL_One_Test_Predom_V0_6/TL_One_V1_0_Comparatif
 chmod +x app_v10.sh
 
 PORT=8911 ./app_v10.sh
+
+
+
+
+
+
+
+
+
+
+
+cd /mnt/code/tlone_app
+TF4=/opt/conda/envs/tlone-tf4/bin/python
+TF5=/opt/conda/envs/tlone-tf5/bin/python
+
+touch tlone/__init__.py tests/__init__.py   # si pas encore fait
+
+grep -c step_runtime tlone/config.py        # ≥ 1
+grep -c ensure_kernel tlone/nbrunner.py     # ≥ 1
+grep -c TLONE_APP_PYTHON app.sh             # ≥ 1
+$TF4 -m pytest -q tests                     # 24 passed
+
+TLONE_DOM_POST_PYTHON=$TF4 TLONE_DOM_EXTRACT_PYTHON=$TF5 TLONE_OV_EXTRACT_PYTHON=$TF4 \
+TLONE_DATA_ROOT=/mnt/data/<ton dataset> \
+$TF4 domino/check_env.py
