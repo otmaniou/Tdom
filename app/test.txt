@@ -270,3 +270,28 @@ cd /mnt/code/tlone_app
 /opt/conda/envs/tlone-tf4/bin/python run_step.py dom_post    --max 2
 /opt/conda/envs/tlone-tf5/bin/python run_step.py dom_extract --max 2
 /opt/conda/envs/tlone-tf4/bin/python run_step.py ov_extract  --max 2
+
+
+
+B=/mnt/data/document_pipeline            # racine du dataset TL-One
+E=$B/employeurs/TOSYALI
+
+mkdir -p $B/_commun/{carthago,salaries,atlas/blocages,atlas/soldes,reglementaire,_modeles}
+mkdir -p $E/{domiciliations_in,transferts_in,transferts_archive,transferts_out,referentiels}
+mkdir -p $E/document_pipeline/V15_A/{01_extraction_raw/json_dossiers,02_postprocessing,03_planning_tl,04_transferts}
+mkdir -p $E/document_pipeline/runs
+
+find $B -maxdepth 4 -type d | sort
+
+
+
+
+ln -s "$B/_commun/carthago/Dossier de domiciliation.xlsx" "$E/Dossier de domiciliation.xlsx"
+
+
+
+cd /mnt/code/tlone_app
+/opt/conda/envs/tlone-tf5/bin/python run_step.py dom_extract --max 2
+/opt/conda/envs/tlone-tf4/bin/python run_step.py dom_post    --max 2
+/opt/conda/envs/tlone-tf4/bin/python run_step.py ov_extract  --max 2
+grep -h '"step"\|"status"' $TLONE_DATA_ROOT/document_pipeline/runs/*.status.json
