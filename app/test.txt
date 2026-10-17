@@ -320,3 +320,22 @@ cd /mnt/code/tlone_app
 
 
 
+
+
+
+
+
+
+
+export TLONE_DATA_ROOT=/mnt/data/document_pipeline/employeurs/TOSYALI
+echo $TLONE_DATA_ROOT
+ls $TLONE_DATA_ROOT/domiciliations_in $TLONE_DATA_ROOT/transferts_in
+
+
+/opt/conda/envs/tlone-tf5/bin/python run_step.py dom_extract
+/opt/conda/envs/tlone-tf4/bin/python run_step.py dom_post
+/opt/conda/envs/tlone-tf4/bin/python run_step.py ov_extract
+grep -h '"step"\|"status"' $TLONE_DATA_ROOT/document_pipeline/runs/*.status.json
+
+
+
