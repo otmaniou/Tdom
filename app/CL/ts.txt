@@ -116,3 +116,62 @@ pip install torch torchvision "transformers>=4.49,<5" accelerate qwen-vl-utils p
 dws-venv-create tlone-tf5   # Partie 1 (Qwen3.8-27B-FP8)
 pip install torch torchvision "transformers>=5.9" accelerate pymupdf pillow pandas psutil \
             opencv-python-headless openpyxl nbclient nbformat ipykernel
+
+
+
+
+
+
+
+
+
+
+for v in tlone-tf4 tlone-tf5; do
+  p=$(find / -path "*/$v/bin/python" 2>/dev/null | head -1)
+  echo "=== $v -> $p"
+  $p -c "import torch, transformers; print('torch', torch.__version__, '| cuda', torch.cuda.is_available(), '| transformers', transformers.__version__)"
+done
+
+
+
+
+
+TF4=<chemin tlone-tf4>/bin/python
+TF5=<chemin tlone-tf5>/bin/python
+
+$TF4 -m pip install -r /mnt/code/tlone_app/requirements.txt
+$TF4 -m pip install torch torchvision "transformers>=4.49,<5" accelerate qwen-vl-utils pillow numpy
+
+$TF5 -m pip install torch torchvision "transformers>=5.9" accelerate pymupdf pillow pandas psutil \
+                    opencv-python-headless openpyxl nbclient nbformat ipykernel
+
+
+
+
+
+
+cd /mnt/code/tlone_app
+$TF4 -m pytest -q tests
+
+
+
+
+TLONE_DOM_POST_PYTHON=$TF4 TLONE_DOM_EXTRACT_PYTHON=$TF5 TLONE_OV_EXTRACT_PYTHON=$TF4 \
+TLONE_DATA_ROOT=/mnt/data/<ton dataset> \
+$TF4 domino/check_env.py
+
+
+
+
+export TLONE_DATA_ROOT=/mnt/data/<ton dataset>
+$TF5 run_step.py dom_extract --max 2
+$TF4 run_step.py ov_extract  --max 2
+
+
+
+
+dws-venv-export tlone-tf4
+dws-venv-export tlone-tf5
+dws-dockerfile-init
+cp /mnt/code/tlone-tf4.yaml /mnt/code/tlone-tf5.yaml /mnt/dockerfile/desired-packages/
+dws-dockerfile-create
