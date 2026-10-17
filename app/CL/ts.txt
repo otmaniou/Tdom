@@ -97,3 +97,22 @@ cd /mnt/TL_One_Test_Predom_V0_6/TL_One_V1_0_Comparatif
 chmod +x app_v10.sh
 
 PORT=8911 ./app_v10.sh
+
+
+
+
+
+
+
+
+
+
+
+dws
+dws-venv-create tlone-tf4   # app + Partie 2 + v26 (Qwen2.5-VL-7B)
+pip install -r /mnt/code/tlone_app/requirements.txt
+pip install torch torchvision "transformers>=4.49,<5" accelerate qwen-vl-utils pillow numpy
+
+dws-venv-create tlone-tf5   # Partie 1 (Qwen3.8-27B-FP8)
+pip install torch torchvision "transformers>=5.9" accelerate pymupdf pillow pandas psutil \
+            opencv-python-headless openpyxl nbclient nbformat ipykernel
