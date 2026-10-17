@@ -201,3 +201,26 @@ done
 
 dws-dockerfile-create
 grep -n "environment\|conda env\|tlone-tf" /mnt/dockerfile/Dockerfile
+
+
+
+cd /mnt/dockerfile
+dws-dockerfile-create
+
+awk '
+/tee -a \/tmp\/environment.yml/ { n++; sub("/tmp/environment.yml", (n==1 ? "/tmp/env-tf4.yml" : "/tmp/env-tf5.yml")) }
+/^RUN conda env create -v -f \/tmp\/environment.yml/ { $0 = "RUN conda env create -v -f /tmp/env-tf4.yml && conda env create -v -f /tmp/env-tf5.yml" }
+{ print }
+' Dockerfile > Dockerfile.tlone
+
+
+
+
+
+grep -n "environment.yml\|env-tf4\|env-tf5\|conda env" Dockerfile.tlone
+
+
+grep -n "^name:" Dockerfile.tlone
+
+
+cat /mnt/dockerfile/Dockerfile.tlone
