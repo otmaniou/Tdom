@@ -112,3 +112,15 @@ if ! "$PY" -c "import streamlit, fitz, nbclient, nbformat, openpyxl, requests" 2
 fi
 exec "$PY" -m streamlit run Accueil.py
 EOF
+
+
+
+
+
+
+/opt/conda/envs/tlone-tf4/bin/python -m pip install -q streamlit pandas openpyxl pymupdf requests nbclient nbformat ipykernel
+/opt/conda/envs/tlone-tf4/bin/python -c "import streamlit, fitz, nbclient, openpyxl; print('OK')"
+
+
+
+grep -c $'\r' /mnt/code/tlone_app_v1/app.sh
