@@ -170,3 +170,34 @@ $TF4 -m pytest -q tests                     # 24 passed
 TLONE_DOM_POST_PYTHON=$TF4 TLONE_DOM_EXTRACT_PYTHON=$TF5 TLONE_OV_EXTRACT_PYTHON=$TF4 \
 TLONE_DATA_ROOT=/mnt/data/<ton dataset> \
 $TF4 domino/check_env.py
+
+
+
+
+
+
+
+
+
+
+
+head -5 /mnt/dockerfile/desired-packages/tlone-tf4.yaml
+head -5 /mnt/dockerfile/desired-packages/tlone-tf5.yaml
+grep -n "environment\|conda env\|COPY" /mnt/dockerfile/Dockerfile
+
+
+
+
+cd /mnt/dockerfile/desired-packages
+for v in tlone-tf4 tlone-tf5; do
+  f=$v.yaml
+  sed -i '/^name:/d; /^prefix:/d' $f       # retire un éventuel name/prefix existant
+  sed -i "1i name: $v" $f                  # ajoute le bon nom en 1re ligne
+  head -3 $f
+done
+
+
+
+
+dws-dockerfile-create
+grep -n "environment\|conda env\|tlone-tf" /mnt/dockerfile/Dockerfile
