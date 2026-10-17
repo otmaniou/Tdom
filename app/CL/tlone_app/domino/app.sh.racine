@@ -1,5 +1,0 @@
-#!/usr/bin/env bash
-# Projet Domino lié à Git : à placer à la racine du dépôt (/mnt/code/app.sh)
-# si le champ « App file » de Publish Domino App n'accepte pas tlone_app_vX/app.sh.
-# Adapter le nom du dossier de version :
-bash /mnt/code/tlone_app_v1/app.sh
