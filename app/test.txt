@@ -295,3 +295,28 @@ cd /mnt/code/tlone_app
 /opt/conda/envs/tlone-tf4/bin/python run_step.py dom_post    --max 2
 /opt/conda/envs/tlone-tf4/bin/python run_step.py ov_extract  --max 2
 grep -h '"step"\|"status"' $TLONE_DATA_ROOT/document_pipeline/runs/*.status.json
+
+
+
+
+
+
+
+
+
+export TLONE_DATA_ROOT=/mnt/data/document_pipeline/employeurs/TOSYALI
+cd /mnt/code/tlone_app
+
+/opt/conda/envs/tlone-tf5/bin/python run_step.py dom_extract     # Partie 1 – GPU, le plus long
+/opt/conda/envs/tlone-tf4/bin/python run_step.py dom_post        # Partie 2 – rapide
+/opt/conda/envs/tlone-tf4/bin/python run_step.py ov_extract      # v26 transferts – GPU
+
+grep -h '"step"\|"status"' $TLONE_DATA_ROOT/document_pipeline/runs/*.status.json
+
+
+
+cd /mnt/code/tlone_app 
+/opt/conda/envs/tlone-tf4/bin/python -m tests.fixtures /mnt/data/document_pipeline/employeurs/DEMO
+
+
+
