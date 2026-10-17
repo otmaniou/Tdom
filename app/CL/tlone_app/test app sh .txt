@@ -45,3 +45,24 @@ PY="${PY:-python}"
 echo "[TL-One] python=$PY | TLONE_DATA_ROOT=${TLONE_DATA_ROOT:-/mnt/data (defaut)}"
 exec "$PY" -m streamlit run Accueil.py
 EOF
+
+
+
+printf '#!/usr/bin/env bash\nbash /mnt/code/tlone_app_v1/app.sh\n' > /mnt/code/app.sh
+chmod +x /mnt/code/app.sh /mnt/code/tlone_app_v1/app.sh
+printf '*.sh text eol=lf\n' > /mnt/code/.gitattributes
+
+
+
+
+grep -c $'\r' /mnt/code/app.sh /mnt/code/tlone_app_v1/app.sh   # doit afficher 0 et 0
+export TLONE_DATA_ROOT=/mnt/data/document_pipeline/employeurs/TOSYALI
+bash /mnt/code/app.sh
+
+
+
+cd /mnt/code
+git add app.sh .gitattributes tlone_app_v1/app.sh
+git status        # aucun fichier Dockerfile* ne doit apparaître
+git commit -m "app.sh : fins de ligne LF + python tlone-tf4"
+git push
