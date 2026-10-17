@@ -14,3 +14,34 @@ printf '*.sh text eol=lf\n' >> .gitattributes
 git add .gitattributes tlone_app/app.sh
 git commit -m "app.sh : fins de ligne Linux"
 git push
+
+
+
+
+
+cat > /mnt/code/tlone_app_v1/app.sh <<'EOF'
+#!/usr/bin/env bash
+set -e
+cd "$(dirname "$0")"
+mkdir -p ~/.streamlit
+cat > ~/.streamlit/config.toml <<CFG
+[server]
+headless = true
+port = 8888
+address = "0.0.0.0"
+enableCORS = false
+enableXsrfProtection = false
+maxUploadSize = 500
+
+[browser]
+gatherUsageStats = false
+
+[theme]
+primaryColor = "#00915A"
+CFG
+PY="${TLONE_APP_PYTHON:-}"
+if [ -z "$PY" ] && [ -x /opt/conda/envs/tlone-tf4/bin/python ]; then PY=/opt/conda/envs/tlone-tf4/bin/python; fi
+PY="${PY:-python}"
+echo "[TL-One] python=$PY | TLONE_DATA_ROOT=${TLONE_DATA_ROOT:-/mnt/data (defaut)}"
+exec "$PY" -m streamlit run Accueil.py
+EOF
