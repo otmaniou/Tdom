@@ -124,3 +124,39 @@ EOF
 
 
 grep -c $'\r' /mnt/code/tlone_app_v1/app.sh
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+   # --- Paquets de l'application TL-One (App + exécution des notebooks) ---
+   RUN /opt/conda/envs/tlone-tf4/bin/pip install --no-cache-dir \
+         "streamlit==1.*" pandas openpyxl pymupdf requests nbclient nbformat ipykernel pytest && \
+       /opt/conda/envs/tlone-tf5/bin/pip install --no-cache-dir \
+         pandas openpyxl pymupdf requests nbclient nbformat ipykernel
+
+   # --- Contrôle : le build échoue si un paquet manque ---
+   RUN /opt/conda/envs/tlone-tf4/bin/python -c "import streamlit, fitz, nbclient, nbformat, openpyxl, pandas, requests, ipykernel; print('tf4 OK')" && \
+       /opt/conda/envs/tlone-tf5/bin/python -c "import fitz, nbclient, nbformat, openpyxl, pandas, ipykernel; print('tf5 OK')"
