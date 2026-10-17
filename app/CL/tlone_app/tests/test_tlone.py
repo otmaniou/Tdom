@@ -197,6 +197,13 @@ def test_periodes():
     assert transfers.parse_periode("03/2026") == ("2026-03", None)
     assert transfers.periode_from_filename("02700731011155100123-202510P2.PDF") == ("2025-10", "P2")
     assert transfers.periode_from_filename("07310-108262-202605.pdf") == ("2026-05", None)
+    assert transfers.periode_from_filename("07310-109655-042026p2.pdf") == ("2026-04", "P2")
+    assert transfers.periode_from_filename("02700731010854700144-202606-OV-PART-2_COKLUK-AHMET.pdf") == ("2026-06", "P2")
+    assert transfers.periode_from_filename("02700731010854700144-202607-OV_COKLUK-AHMET.pdf") == ("2026-07", None)
+    assert transfers.periode_from_filename("07310-109655-04 p1.pdf") == (None, "P1")
+    from tlone.common import siege_racine
+    assert siege_racine("02700731010854700144-202607-OV_COKLUK") == "07310108547"
+    assert siege_racine("07310-109655-04 p1") == "07310109655"
 
 
 def test_carry_over(env):
