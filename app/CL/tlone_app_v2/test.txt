@@ -87,3 +87,7 @@ EOF
 cd /mnt/code/tlone_app_v2
 python3 verifier_copie.py --reparer
 cat /mnt/code/app.sh | tail -1
+
+
+
+export TLONE_RUN_MODE=worker /opt/conda/envs/tlone-tf4/bin/python run_worker.py --steps dom_extract --prewarm
