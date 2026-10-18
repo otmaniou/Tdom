@@ -27,9 +27,9 @@ Changer de version : modifier la ligne de `/mnt/code/app.sh` (`tlone_app_v1` →
 
 - Base : *Domino DWS Ingenuity GPU Standard 1.1.1*, Dockerfile produit par la chaîne DWS
   (deux environnements conda `tlone-tf4` et `tlone-tf5`).
-- **Révision 6** : ajouter les lignes de `domino/Dockerfile_instructions.txt` (paquets de l'app,
+- **Révision 7** : ajouter les lignes de `domino/Dockerfile_instructions.txt` (paquets de l'app,
   verrou des versions torch/transformers, contrôle final). Les logs du build doivent afficher
-  `tf4 OK 4.57.0 …` et `tf5 OK 5.x …`. Puis : révision 6 **Active**.
+  `tf4 OK 4.57.0 …` et `tf5 OK 5.x …`. Puis : révision 7 **Active**. (La révision 6 laissait transformers 5.20.1 dans tlone-tf4 : v26 OV en échec.)
 - Jamais de Dockerfile dans le projet (jeton Artifactory).
 
 ## 3. Variables d'environnement du projet (Settings)
@@ -57,7 +57,7 @@ python3 verifier_copie.py --reparer   # copie par copier-coller : fins de ligne 
 ## 5. Publier l'App (Deployments › App)
 
 1. Code : `code/app.sh` (le lanceur racine).
-2. Environment : **tlone**, révision Active (6).
+2. Environment : **tlone**, révision Active (7).
 3. Hardware : tier **CPU** (l'App ne charge aucun modèle ; les extractions partent en jobs GPU).
 4. Data : dataset `document_pipeline` monté.
 5. Access : **Restricted** (données clients).
