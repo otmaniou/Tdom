@@ -110,3 +110,7 @@ ls -la $TLONE_DATA_ROOT/document_pipeline/runs/ | tail -5
 du -sh /mnt/data/document_pipeline
 cp -a /mnt/data/document_pipeline /domino/datasets/local/TL_one_domino/
 ls /domino/datasets/local/TL_one_domino/document_pipeline/employeurs/TOSYALI
+
+
+
+/domino/datasets/local/TL_one_domino/document_pipeline/employeurs/TOSYALI
