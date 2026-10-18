@@ -74,3 +74,25 @@ grep -rlI $'\r' --include=*.sh --include=*.py . || echo "fins de ligne OK"
 5. **Transferts OV** : déposer les OV, extraction v26, puis **③ Dossiers & validation**.
 
 Un job lancé par erreur : Jobs › cocher › Stop, puis dans l'app « Marquer abandonné ».
+
+## 7. Démonstrations : worker GPU (modèle chargé une seule fois)
+
+Pas de Domino Job : un **worker** tourne dans un workspace GPU que vous ouvrez vous-même ;
+l'App lui confie les extractions. Le modèle est chargé une fois, puis chaque demande ne fait
+que le traitement des PDF. Les notebooks ne sont pas modifiés.
+
+1. Variable du projet : `TLONE_RUN_MODE=worker` ; App publiée sur un **tier CPU** (Stop/Start).
+2. Workspace sur le tier **H100**, environnement `tlone`, puis dans un terminal :
+   ```bash
+   /opt/conda/envs/tlone-tf4/bin/python /mnt/code/tlone_app_v2/run_worker.py --steps dom_extract --prewarm
+   ```
+   - `--steps dom_extract` : Partie 1 seulement (Qwen3.8-27B ≈ 55 Go de mémoire GPU) ;
+     `--steps dom_extract,ov_extract` charge aussi Qwen2.5-VL-7B (≈ 70 Go au total : à essayer avant la démo).
+   - `--prewarm` : charge les modèles tout de suite (sinon à la première demande).
+   - Attendre « prêt (modèle chargé) » : l'App affiche alors « Worker GPU actif » dans la barre latérale.
+3. Dans l'App : déposer les PDF, « Lancer » → le worker traite, l'App suit le statut (Rafraîchir).
+   La Partie 2 (CPU) est exécutée par le worker également.
+4. Fin de démo : **Ctrl+C** dans le terminal (libère le GPU), puis arrêter le workspace.
+
+Le terminal du worker affiche la progression du notebook en direct ; le journal de chaque demande
+est aussi dans `document_pipeline/runs/<run_id>.log`.

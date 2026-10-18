@@ -15,6 +15,7 @@ _V = tuple(int(x) for x in st.__version__.split(".")[:2])
 # Compatibilité : `width="stretch"` (>= 1.48) remplace `use_container_width` (déprécié).
 W = {"width": "stretch"} if _V >= (1, 48) else {"use_container_width": True}
 
+MODE_LABEL = {"domino": "Domino Job", "local": "processus local", "worker": "worker GPU (modèle déjà chargé)"}
 STATUS_ICON = {"SUCCEEDED": "✅", "FAILED": "❌", "RUNNING": "⏳", "EN_FILE": "🕓", "ABANDONNE": "⛔"}
 
 
@@ -26,6 +27,15 @@ def setup(title: str):
         st.caption(f"{APP_VERSION} · mode **{s.run_mode}**")
         st.caption(f"Données : `{s.paths.data_root}`")
         st.caption(f"Utilisateur : **{current_user()}**")
+        if s.run_mode == "worker":
+            from .worker import worker_state
+            w = worker_state(s)
+            if w:
+                st.success(f"Worker GPU actif ({w['state'].lower()})"
+                           + (f" — {w['current']}" if w.get("current") else "")
+                           + (f" — modèles : {', '.join(w['warm'])}" if w.get("warm") else ""))
+            else:
+                st.error("Worker GPU arrêté : lancer run_worker.py dans un workspace GPU")
         gen = preflight.blocking(preflight.check_general(s))
         if gen:
             st.error(f"{len(gen)} prérequis bloquant(s) — voir l'Accueil")
@@ -65,13 +75,13 @@ def job_panel(s, step: str, help_text: str = ""):
         c1, c2 = st.columns([1, 2])
         test = c1.number_input("Limiter à N dossiers (0 = tous)", min_value=0, value=0, step=1, key=f"max_{step}")
         rt = s.step_runtime(step)
-        c2.caption(f"Exécution : {'Domino Job' if s.run_mode == 'domino' else 'processus local'}"
+        c2.caption(f"Exécution : {MODE_LABEL.get(s.run_mode, s.run_mode)}"
                    + (f" · tier `{rt['tier']}`" if rt["tier"] else "")
                    + (f" · env `{rt['environment']}`" if rt["environment"] else "")
                    + (f" · python `{rt['python']}`" if rt["python"] else "")
                    + f" · notebook `{s.notebooks[step].name}`"
                    + f" · modèle `{rt['model'] or 'MODEL_PATH du notebook'}`" if meta["gpu"] else
-                   f"Exécution : {'Domino Job' if s.run_mode == 'domino' else 'processus local'}"
+                   f"Exécution : {MODE_LABEL.get(s.run_mode, s.run_mode)}"
                    + (f" · tier `{rt['tier']}`" if rt["tier"] else "") + f" · notebook `{s.notebooks[step].name}` · sans modèle")
         # ---- Contrôle des prérequis : aucun lancement tant qu'un point est BLOQUANT ----
         rows = preflight.check_step(s, step)
@@ -96,13 +106,20 @@ def job_panel(s, step: str, help_text: str = ""):
             except Exception as exc:  # noqa: BLE001
                 st.error(f"Lancement impossible : {exc}")
         pend = preflight.pending_runs(s, step)
+        for r in pend:
+            ds = jobs.domino_status(r["domino_job_id"]) if r.get("domino_job_id") else None
+            st.info(f"⏳ Traitement en cours : **{r['run_id']}**"
+                    + (f" — statut Domino : **{ds}**" if ds else "")
+                    + (f" — job {r['domino_job_id']}" if r.get("domino_job_id") else "")
+                    + ". Suivi détaillé : menu Jobs du projet ; cliquez « Rafraîchir » pour mettre à jour.")
         if pend:
-            pick = st.selectbox("Run resté en attente (job arrêté dans Domino) :", [r["run_id"] for r in pend],
-                                key=f"ab_{step}")
-            if st.button("Marquer abandonné", key=f"abb_{step}"):
-                jobs.mark_abandoned(s, pick, current_user())
-                audit(s.paths.audit_log, "JOB_ABANDON", current_user(), run_id=pick)
-                st.rerun()
+            with st.expander("Le job a été arrêté ou a échoué dans Domino sans que l'app le voie ?"):
+                pick = st.selectbox("Run à clore", [r["run_id"] for r in pend], key=f"ab_{step}")
+                st.caption("À n'utiliser que si le job n'apparaît plus comme en cours dans Domino.")
+                if st.button("Marquer abandonné", key=f"abb_{step}"):
+                    jobs.mark_abandoned(s, pick, current_user())
+                    audit(s.paths.audit_log, "JOB_ABANDON", current_user(), run_id=pick)
+                    st.rerun()
         runs = [r for r in jobs.list_runs(s, 200) if r.get("step") == step][:5]
         if runs:
             df = pd.DataFrame([{

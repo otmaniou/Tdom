@@ -30,7 +30,7 @@ def _append_index(s: Settings, rec: dict) -> None:
         f.write(json.dumps(rec, ensure_ascii=False, default=str) + "\n")
 
 
-def _domino_request(method: str, path: str, payload: dict | None = None) -> dict:
+def _domino_request(method: str, path: str, payload: dict | None = None, timeout: int = 60) -> dict:
     import requests
 
     proxy = os.environ.get("DOMINO_API_PROXY")
@@ -39,7 +39,7 @@ def _domino_request(method: str, path: str, payload: dict | None = None) -> dict
     else:
         base = os.environ["DOMINO_API_HOST"].rstrip("/")
         headers = {"X-Domino-Api-Key": os.environ["DOMINO_USER_API_KEY"]}
-    r = requests.request(method, base + path, json=payload, headers=headers, timeout=60)
+    r = requests.request(method, base + path, json=payload, headers=headers, timeout=timeout)
     r.raise_for_status()
     return r.json() if r.content else {}
 
@@ -70,7 +70,11 @@ def launch(s: Settings, step: str, max_items: int | None = None, user: str | Non
         from .common import backup
         rec["backup_validation"] = str(backup(s.paths.validation_xlsx))
 
-    if s.run_mode == "domino":
+    if s.run_mode == "worker":
+        # démonstration / production : un worker GPU déjà lancé (run_worker.py) prend la demande
+        from .worker import enqueue
+        rec["queue_file"] = str(enqueue(s, dict(rec)))
+    elif s.run_mode == "domino":
         rt = s.step_runtime(step)
         tier = rt["tier"]
         payload = {"projectId": os.environ["DOMINO_PROJECT_ID"],
@@ -103,7 +107,7 @@ def launch(s: Settings, step: str, max_items: int | None = None, user: str | Non
 
 def domino_status(job_id: str) -> str | None:
     try:
-        d = _domino_request("GET", f"/v4/jobs/{job_id}")
+        d = _domino_request("GET", f"/v4/jobs/{job_id}", timeout=5)
         st = d.get("statuses") or {}
         return st.get("executionStatus") or d.get("status")
     except Exception:

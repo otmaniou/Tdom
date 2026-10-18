@@ -63,7 +63,7 @@ variables, vérifications, publication de l'App, premier parcours).
 | Variable | Rôle | Défaut |
 |---|---|---|
 | `TLONE_DATA_ROOT` | racine des données de l'employeur | `/mnt/data` (bloquant si non défini) |
-| `TLONE_RUN_MODE` | `domino` (Jobs) ou `local` (sous-processus) | `domino` si `DOMINO_PROJECT_ID` existe |
+| `TLONE_RUN_MODE` | `domino` (Jobs), `worker` (worker GPU lancé à la main : `run_worker.py`, démos) ou `local` | `domino` si `DOMINO_PROJECT_ID` existe |
 | `TLONE_GPU_TIER` / `TLONE_CPU_TIER` | ID du hardware tier des jobs | — (bloquant pour les étapes GPU) |
 | `TLONE_<ETAPE>_TIER` / `_ENV` / `_PYTHON` | surcharge par étape (`DOM_EXTRACT`, `DOM_POST`, `OV_EXTRACT`) | tier commun / `TLONE_ENV_ID` / env conda de l'étape |
 | `TLONE_APP_PYTHON` | interpréteur de l'app | `/opt/conda/envs/tlone-tf4/bin/python` |

@@ -562,3 +562,66 @@ def test_nouveaux_champs_pris_en_charge(env):
     assert cell(m, "date_visa", "CTS")["text"] == "05/01/2026"
     # un autre dossier sans ces champs n'affiche plus « à extraire » mais « — » (champ connu, absent de la pièce)
     assert not cell(_mx(p)["DEMIR_ALI_CNT.pdf"], "sig_trav", "DOM")["a_extraire"]
+
+
+def test_partie2_attend_partie1(env, monkeypatch):
+    p, s = env
+    from tlone import jobs, preflight
+    monkeypatch.setattr(jobs.subprocess, "Popen", lambda *a, **k: type("P", (), {"pid": 1})())
+    real = preflight.check_step
+    monkeypatch.setattr(preflight, "check_step", lambda s_, step: [])
+    jobs.launch(s, "dom_extract", 1, "testeur")
+    monkeypatch.setattr(preflight, "check_step", real)
+    ko = {r["contrôle"] for r in preflight.blocking(preflight.check_step(s, "dom_post"))}
+    assert "Extraction DOM en cours" in ko
+
+
+# ------------------------------------------------------------ worker GPU (modèle chargé une fois)
+def test_worker_modele_charge_une_fois(env, tmp_path, monkeypatch):
+    import dataclasses
+    import sys as _sys
+    import nbformat
+    from tlone import jobs, preflight, worker
+    p, s = env
+    nb = nbformat.v4.new_notebook()
+    nb.cells = [
+        nbformat.v4.new_code_cell("MAX_PDFS = None\nfrom pathlib import Path\n"
+                                  "INPUT_DIR = Path('/mnt/data/domiciliations_in')\n"
+                                  "pdfs = sorted(INPUT_DIR.glob('*.pdf'))\n"
+                                  "if MAX_PDFS is not None:\n    pdfs = pdfs[:int(MAX_PDFS)]"),
+        nbformat.v4.new_code_cell("# simule AutoModel.from_pretrained(...)\nLOADS = globals().get('LOADS', 0) + 1\nCOUNT = 0"),
+        nbformat.v4.new_code_cell("if not pdfs:\n    print('rien')\nelse:\n    COUNT += 1\n"
+                                  "    (INPUT_DIR.parent / 'out.txt').write_text(f'{LOADS} {COUNT} {len(pdfs)}')"),
+    ]
+    fake = tmp_path / "fake_part1.ipynb"
+    nbformat.write(nb, str(fake))
+    s = dataclasses.replace(s, notebooks={**s.notebooks, "dom_extract": fake}, run_mode="worker")
+    # sans worker : lancement bloqué
+    assert any(r["contrôle"] == "Worker GPU" for r in preflight.blocking(preflight.check_step(s, "dom_extract")))
+    w = worker.Worker(s, ["dom_extract"], pythons={"dom_extract": _sys.executable})
+    w.beat()
+    assert worker.worker_state(s)["state"] == "ATTENTE"
+    monkeypatch.setattr(preflight, "check_step", lambda s_, step: [])
+    r1 = jobs.launch(s, "dom_extract", 1, "testeur")
+    w.loop(once=True)
+    assert (p.data_root / "out.txt").read_text() == "1 1 1"
+    r2 = jobs.launch(s, "dom_extract", None, "testeur")
+    w.loop(once=True)
+    assert (p.data_root / "out.txt").read_text() == "1 2 4"   # modèle chargé 1 fois, 2 traitements, 4 PDF
+    runs = {r["run_id"]: r for r in jobs.list_runs(s)}
+    assert runs[r1["run_id"]]["status"] == runs[r2["run_id"]]["status"] == "SUCCEEDED"
+    w.stop()
+    assert worker.worker_state(s) is None
+
+
+def test_worker_reconnait_les_vrais_notebooks(env):
+    """Sur les vrais notebooks : cellule de config, chargement du modèle et traitement bien repérés."""
+    import sys as _sys
+    from tlone import worker
+    _, s = env
+    for step, n_proc in (("dom_extract", 1), ("ov_extract", 2)):
+        w = worker.WarmNotebook(s, step, _sys.executable)
+        model = [i for i, c in enumerate(w.nb.cells) if c.cell_type == "code" and worker.MODEL_MARKER in c.source]
+        assert model and w.cfg < model[0] < min(w.process), step     # config -> modèle -> traitement
+        assert len(w.process) == n_proc and "GLOB_PDF_CASE_INSENSITIVE" in w.patches
+        assert "MAX_PDFS" in w.nb.cells[w.cfg].source or step == "ov_extract"

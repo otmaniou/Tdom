@@ -125,6 +125,14 @@ def check_general(s: Settings) -> list[dict]:
                      f"Manquent dans l'image : {', '.join(miss)} → révision d'environnement" if miss else ""))
 
     rows.append(_row(OK, "Mode d'exécution", s.run_mode))
+    if s.run_mode == "worker":
+        from .worker import worker_state
+        w = worker_state(s)
+        rows.append(_row(OK if w else KO, "Worker GPU",
+                         f"actif sur {w['host']} — {w['state']} — modèles chargés : {', '.join(w['warm']) or 'aucun'}"
+                         if w else "non démarré",
+                         "" if w else "Dans un workspace GPU : /opt/conda/envs/tlone-tf4/bin/python "
+                                      f"{APP_DIR}/run_worker.py --prewarm"))
     if s.run_mode == "domino":
         if not os.environ.get("DOMINO_PROJECT_ID"):
             rows.append(_row(KO, "DOMINO_PROJECT_ID", "absent", "Mode domino hors Domino : TLONE_RUN_MODE=local"))
@@ -194,17 +202,26 @@ def check_step(s: Settings, step: str) -> list[dict]:
                 rows.append(_row(OK if good else KO, f"transformers {step}", r["transformers"],
                                  "" if good else f"Attendu {want}x"))
 
+    if s.run_mode == "worker":
+        from .worker import worker_state
+        if not worker_state(s):
+            rows.append(_row(KO, "Worker GPU", "non démarré",
+                             f"Lancer dans un workspace GPU : python {APP_DIR}/run_worker.py --prewarm"))
     if STEPS[step]["gpu"]:
         model = rt["model"] or MODEL_DEFAULT[step]
         here = Path(model).is_dir()
         # En mode domino le modèle est lu par le job : absent ici = ModelHub non monté sur l'App (simple alerte).
-        lvl = OK if here else (WARN if s.run_mode == "domino" else KO)
+        lvl = OK if here else (WARN if s.run_mode in ("domino", "worker") else KO)
         rows.append(_row(lvl, f"Modèle {step}", model,
                          "" if here else "ModelHub non visible ici : vérifier qu'il est monté sur le job"))
         if s.run_mode == "domino":
             rows.append(_row(OK if rt["tier"] else KO, "Tier GPU du job", rt["tier"] or "non défini",
                              "" if rt["tier"] else "Définir TLONE_GPU_TIER (identifiant du tier H100) — "
                                                    "sinon le job part sur le tier par défaut du projet (CPU)"))
+    elif s.run_mode == "domino":
+        rows.append(_row(OK if rt["tier"] else WARN, "Tier CPU du job", rt["tier"] or "défaut du projet",
+                         "" if rt["tier"] else "Définir TLONE_CPU_TIER (identifiant d'un tier CPU) — sinon le job "
+                                               "prend le tier par défaut du projet, qui peut être un GPU"))
     if s.run_mode == "domino":
         rows.append(_row(OK if rt["environment"] else WARN, "Environnement du job",
                          rt["environment"] or "défaut du projet",
@@ -214,6 +231,11 @@ def check_step(s: Settings, step: str) -> list[dict]:
     if pend:
         rows.append(_row(KO, "Run déjà en cours", ", ".join(r["run_id"] for r in pend),
                          "Attendre la fin, ou l'arrêter dans Jobs puis « Marquer abandonné »"))
+    if step == "dom_post":  # la Partie 2 doit attendre la fin de l'extraction DOM (sinon JSON incomplets)
+        amont = pending_runs(s, "dom_extract")
+        if amont:
+            rows.append(_row(KO, "Extraction DOM en cours", ", ".join(r["run_id"] for r in amont),
+                             "Attendre la fin de la Partie 1 avant de lancer la Partie 2"))
     return rows
 
 
