@@ -1,200 +1,23 @@
+# --- TL-One révision 7 : tlone-tf4 fixé à transformers 4.57.0 (v26 OV) ---
+RUN /opt/conda/envs/tlone-tf4/bin/pip install --no-cache-dir "transformers==4.57.0" && \
+    (/opt/conda/envs/tlone-tf4/bin/pip check || true)
 
+# --- Paquets de l'application TL-One, sans modifier torch / transformers ---
+RUN for E in tlone-tf4 tlone-tf5; do \
+      /opt/conda/envs/$E/bin/pip freeze | grep -iE '^(torch|torchvision|transformers|tokenizers|huggingface.hub|accelerate|safetensors|numpy|pillow|protobuf)==' > /tmp/verrou-$E.txt; \
+    done && \
+    /opt/conda/envs/tlone-tf4/bin/pip install --no-cache-dir -c /tmp/verrou-tlone-tf4.txt \
+      "streamlit==1.*" pandas openpyxl pymupdf requests nbclient nbformat ipykernel pytest && \
+    /opt/conda/envs/tlone-tf5/bin/pip install --no-cache-dir -c /tmp/verrou-tlone-tf5.txt \
+      pandas openpyxl pymupdf requests nbclient nbformat ipykernel
 
-#!/usr/bin/env bash
-set -euo pipefail
+# --- Contrôle : le build échoue si la version de transformers n'est pas la bonne ---
+RUN /opt/conda/envs/tlone-tf4/bin/python -c "import streamlit, fitz, nbclient, nbformat, openpyxl, pandas, requests, ipykernel, transformers, torch; assert transformers.__version__=='4.57.0', transformers.__version__; from transformers import AutoProcessor, AutoModelForVision2Seq; print('tf4 OK', transformers.__version__, torch.__version__)" && \
+    /opt/conda/envs/tlone-tf5/bin/python -c "import fitz, nbclient, nbformat, openpyxl, pandas, ipykernel, transformers, torch; assert transformers.__version__.startswith('5.'), transformers.__version__; print('tf5 OK', transformers.__version__, torch.__version__)"
 
-# ============================================================
-# TL-ONE V1.0 — LANCEMENT STREAMLIT SUR DOMINO
-# ============================================================
 
-# 1. Répertoires
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+   /opt/conda/envs/tlone-tf4/bin/python -c "import transformers; print(transformers.__version__)"
 
-cd "$PROJECT_ROOT"
 
-echo "============================================"
-echo "       TL-ONE V1.0 — DOMINO APP"
-echo "============================================"
-echo "Projet : $PROJECT_ROOT"
-echo "Application : $SCRIPT_DIR/app_v10.py"
-
-# 2. Environnement Python YaRisk
-PYTHON="/opt/conda/envs/yarisk_demo/bin/python"
-
-if [ ! -x "$PYTHON" ]; then
-    echo "ERREUR : environnement yarisk_demo introuvable."
-    echo "Chemin attendu : $PYTHON"
-    echo "Vérifier l'environnement sélectionné pour Domino App."
-    exit 1
-fi
-
-echo "Python utilisé : $PYTHON"
-
-# 3. Vérifier les dépendances
-"$PYTHON" -m streamlit --version
-
-"$PYTHON" -c \
-    "import streamlit, pandas, fitz, openpyxl; print('Dépendances principales OK')"
-
-# 4. Vérifier le fichier de l'application
-if [ ! -f "$SCRIPT_DIR/app_v10.py" ]; then
-    echo "ERREUR : app_v10.py introuvable."
-    exit 1
-fi
-
-# 5. Vérifier les résultats V1.0
-RESULT_FILE="$PROJECT_ROOT/resultats/v10/comparatif_dossiers_v10.json"
-
-if [ ! -f "$RESULT_FILE" ]; then
-    echo "AVERTISSEMENT : résultats V1.0 absents."
-    echo "Fichier attendu : $RESULT_FILE"
-    echo "L'application pourra démarrer, mais les dossiers"
-    echo "ne seront pas disponibles tant que les résultats"
-    echo "n'auront pas été générés."
-else
-    echo "Résultats V1.0 trouvés."
-fi
-
-# 6. Configuration du serveur
-# Port 8888 : Domino App publiée
-# Possibilité de remplacer avec PORT=8911 pour les tests
-PORT="${PORT:-8888}"
-
-echo "Démarrage Streamlit sur le port $PORT"
-
-# 7. Démarrage de l'application
-exec "$PYTHON" -m streamlit run "$SCRIPT_DIR/app_v10.py" \
-    --server.address 0.0.0.0 \
-    --server.port "$PORT" \
-    --server.headless true \
-    --server.fileWatcherType none \
-    --browser.gatherUsageStats false \
-    -- --root "$PROJECT_ROOT"
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-cd /mnt/TL_One_Test_Predom_V0_6/TL_One_V1_0_Comparatif
-
-chmod +x app_v10.sh
-
-PORT=8911 ./app_v10.sh
-
-
-
-
-
-
-
-
-
-
-
-dws
-dws-venv-create tlone-tf4   # app + Partie 2 + v26 (Qwen2.5-VL-7B)
-pip install -r /mnt/code/tlone_app/requirements.txt
-pip install torch torchvision "transformers>=4.49,<5" accelerate qwen-vl-utils pillow numpy
-
-dws-venv-create tlone-tf5   # Partie 1 (Qwen3.8-27B-FP8)
-pip install torch torchvision "transformers>=5.9" accelerate pymupdf pillow pandas psutil \
-            opencv-python-headless openpyxl nbclient nbformat ipykernel
-
-
-
-
-
-
-
-
-
-
-for v in tlone-tf4 tlone-tf5; do
-  p=$(find / -path "*/$v/bin/python" 2>/dev/null | head -1)
-  echo "=== $v -> $p"
-  $p -c "import torch, transformers; print('torch', torch.__version__, '| cuda', torch.cuda.is_available(), '| transformers', transformers.__version__)"
-done
-
-
-
-
-
-TF4=<chemin tlone-tf4>/bin/python
-TF5=<chemin tlone-tf5>/bin/python
-
-$TF4 -m pip install -r /mnt/code/tlone_app/requirements.txt
-$TF4 -m pip install torch torchvision "transformers>=4.49,<5" accelerate qwen-vl-utils pillow numpy
-
-$TF5 -m pip install torch torchvision "transformers>=5.9" accelerate pymupdf pillow pandas psutil \
-                    opencv-python-headless openpyxl nbclient nbformat ipykernel
-
-
-
-
-
-
-cd /mnt/code/tlone_app
-$TF4 -m pytest -q tests
-
-
-
-
-TLONE_DOM_POST_PYTHON=$TF4 TLONE_DOM_EXTRACT_PYTHON=$TF5 TLONE_OV_EXTRACT_PYTHON=$TF4 \
-TLONE_DATA_ROOT=/mnt/data/<ton dataset> \
-$TF4 domino/check_env.py
-
-
-
-
-export TLONE_DATA_ROOT=/mnt/data/<ton dataset>
-$TF5 run_step.py dom_extract --max 2
-$TF4 run_step.py ov_extract  --max 2
-
-
-
-
-dws-venv-export tlone-tf4
-dws-venv-export tlone-tf5
-dws-dockerfile-init
-cp /mnt/code/tlone-tf4.yaml /mnt/code/tlone-tf5.yaml /mnt/dockerfile/desired-packages/
-dws-dockerfile-create
-
-
-
-
-
-
-
-
-
-
-   cd /mnt/code
-   rm -rf tlone_app
-   mkdir tlone_app && cd tlone_app
-   unzip -q ../tlone_app_v1.zip && rm ../tlone_app_v1.zip
-   ls domino/                    # check_env.py  PROCEDURE_TLONE.md  ...
-   $TF4 -m pytest -q tests       # 24 passed
-
-
-
-   TLONE_DOM_POST_PYTHON=$TF4 TLONE_DOM_EXTRACT_PYTHON=$TF5 TLONE_OV_EXTRACT_PYTHON=$TF4 \
-   TLONE_DATA_ROOT=/mnt/data/<ton dataset> \
-   $TF4 domino/check_env.py
-
+   cd /mnt/code/tlone_app_v2
+   /opt/conda/envs/tlone-tf4/bin/python run_worker.py --steps dom_extract,ov_extract --prewarm
