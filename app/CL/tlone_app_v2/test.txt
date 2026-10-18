@@ -78,3 +78,12 @@ for f, h in H.items():
     else: print("DIFFERENT", f)
 print(f"--- {ok}/{len(H)} fichiers identiques à la version Claude")
 EOF
+
+
+
+
+
+
+cd /mnt/code/tlone_app_v2
+python3 verifier_copie.py --reparer
+cat /mnt/code/app.sh | tail -1
