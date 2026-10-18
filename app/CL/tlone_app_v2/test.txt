@@ -41,3 +41,40 @@ md5sum -c MANIFEST.md5 2>/dev/null | grep -v ': OK$'; echo "--- code vérifié"
 
 export TLONE_RUN_MODE=worker
 /opt/conda/envs/tlone-tf4/bin/python run_worker.py --steps dom_extract --prewarm
+
+
+
+
+
+
+
+
+
+
+
+
+cd /mnt/code/tlone_app_v2 && python3 - <<'EOF'
+import hashlib, pathlib
+H = {"Accueil.py":"1ff2956ce3d5","README.md":"acf6b4876832","app.sh":"665bea40b309",
+"domino/PROCEDURE_TLONE.md":"909ff0c60826","domino/app.sh.racine":"fca6da26791a","domino/check_env.py":"b19c0e69aadc",
+"notebooks/Planning_TL_V15A.ipynb":"7e5de985e543","notebooks/pipeline_ocr_vlm_v26_stabilise_internvl_note.ipynb":"924422e233f0",
+"notebooks/pipeline_part1_v15_A_fast_standardized_qwen3_8_27b.ipynb":"af77bc7616c4",
+"notebooks/pipeline_part2_v15_A_normalization_dq_confidence.ipynb":"5bbcdb3f3ecc",
+"pages/1_Controles_DOM.py":"51e93723492a","pages/2_Planning_TL.py":"38b5cd9e2f9c","pages/3_Transferts_OV.py":"98a1331ff56d",
+"requirements.txt":"b01b41553811","run_step.py":"8d1e8bc2676f","run_worker.py":"3ec4e67e2080",
+"tests/__init__.py":"68b329da9893","tests/fixtures.py":"9f2c9d1dd223","tests/test_tlone.py":"53b2e84e85b5",
+"tlone/__init__.py":"68b329da9893","tlone/carthago.py":"9589d732678e","tlone/common.py":"b747629f6a3b",
+"tlone/config.py":"9309001ffea8","tlone/domvalid.py":"1dd79d5d2ecb","tlone/jobs.py":"6e6d35790857",
+"tlone/matrice.py":"5b586f49b5a7","tlone/montant_lettres.py":"008296e7ce51","tlone/nbrunner.py":"4dafb7c5ee2b",
+"tlone/ov_matrice.py":"567cc17bc6e4","tlone/planning.py":"ff3e13dd36cb","tlone/preflight.py":"9916367b791b",
+"tlone/transfers.py":"71ab8d22ec11","tlone/ui.py":"1b8f3bf5d034","tlone/ui_matrice.py":"4e603f90cdd5",
+"tlone/ui_ov.py":"035f23c0e272","tlone/worker.py":"02e0d8be6f3e"}
+ok = 0
+for f, h in H.items():
+    p = pathlib.Path(f)
+    if not p.exists(): print("ABSENT ", f); continue
+    b = p.read_bytes().removeprefix(b"\xef\xbb\xbf").replace(b"\r\n", b"\n").rstrip(b"\n") + b"\n"
+    if hashlib.md5(b).hexdigest()[:12] == h: ok += 1
+    else: print("DIFFERENT", f)
+print(f"--- {ok}/{len(H)} fichiers identiques à la version Claude")
+EOF
