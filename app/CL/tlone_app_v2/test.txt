@@ -25,3 +25,19 @@ ls -d $TLONE_DATA_ROOT && readlink -f $TLONE_DATA_ROOT
 ls $TLONE_DATA_ROOT
 ls /domino/datasets/local/TL_one_domino
 nvidia-smi --query-gpu=name,memory.used,memory.total --format=csv
+
+
+
+
+
+
+cd /mnt/code/tlone_app_v2
+grep -c $'\r' Accueil.py app.sh            # un nombre > 0 confirme le diagnostic
+find . -type f \( -name '*.py' -o -name '*.sh' -o -name '*.md' -o -name '*.txt' -o -name '*.ipynb' -o -name '*.racine' -o -name '*.md5' \) -exec sed -i 's/\r$//' {} +
+md5sum -c MANIFEST.md5 2>/dev/null | grep -v ': OK$'; echo "--- code vérifié"
+
+
+
+
+export TLONE_RUN_MODE=worker
+/opt/conda/envs/tlone-tf4/bin/python run_worker.py --steps dom_extract --prewarm
