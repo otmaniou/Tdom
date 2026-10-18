@@ -47,9 +47,9 @@ Partie 2 et v26 → `tlone-tf4` (`TLONE_<ETAPE>_PYTHON` pour forcer un autre int
 ## 4. Vérifier dans un workspace (environnement `tlone`, tier GPU)
 
 ```bash
-cd /mnt/code/tlone_app_v1
-md5sum -c MANIFEST.md5 | grep -v ': OK$'                  # rien ne doit s'afficher
-grep -rlI $'\r' --include=*.sh --include=*.py . || echo "fins de ligne OK"
+cd /mnt/code/tlone_app_v2
+python3 verifier_copie.py --reparer   # copie par copier-coller : fins de ligne remises en LF, puis
+                                      # « 37/37 fichiers identiques » attendu (sinon recopier les DIFFERENT)
 /opt/conda/envs/tlone-tf4/bin/python -m pytest -q tests     # tous les tests « passed »
 /opt/conda/envs/tlone-tf4/bin/python domino/check_env.py    # environnements, GPU, modèles, prérequis
 ```
