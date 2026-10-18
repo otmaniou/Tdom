@@ -13,3 +13,15 @@ r = requests.get(f"{host}/v4/projects/{proj}/hardwareTiers", headers=h)
 for t in r.json():
     ht = t.get("hardwareTier", t)
     print(ht.get("id"), "|", ht.get("name"))
+
+
+
+
+
+cd /mnt/code/tlone_app_v2
+md5sum -c MANIFEST.md5 | grep -v ': OK$'; echo "--- code vérifié"
+echo $TLONE_RUN_MODE $TLONE_DATA_ROOT
+ls -d $TLONE_DATA_ROOT && readlink -f $TLONE_DATA_ROOT
+ls $TLONE_DATA_ROOT
+ls /domino/datasets/local/TL_one_domino
+nvidia-smi --query-gpu=name,memory.used,memory.total --format=csv
