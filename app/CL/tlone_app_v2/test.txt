@@ -97,3 +97,9 @@ export TLONE_RUN_MODE=worker /opt/conda/envs/tlone-tf4/bin/python run_worker.py 
 
 
 cat $TLONE_DATA_ROOT/document_pipeline/runs/worker_heartbeat.json; echo; date; date -u
+
+
+df -h /mnt/data/document_pipeline /domino/datasets/local/TL_one_domino
+mount | grep -E "/mnt/data|/domino/datasets|/domino/edv"
+ls -la /mnt/data
+ls -la $TLONE_DATA_ROOT/document_pipeline/runs/ | tail -5
