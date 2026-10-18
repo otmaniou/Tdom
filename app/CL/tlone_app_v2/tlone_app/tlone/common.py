@@ -60,7 +60,7 @@ def parse_amount(v):
     if isinstance(v, (int, float, np.number)) and not isinstance(v, bool):
         return float(v)
     s = str(v).upper().strip()
-    s = s.replace(" ", "").replace(" ", "")
+    s = s.replace(" ", "").replace("\u00a0", "")
     s = s.replace("DZD", "").replace("DA", "")
     s = s.replace(":", ".")
     if "," in s and "." in s:
