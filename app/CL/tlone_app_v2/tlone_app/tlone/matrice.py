@@ -496,11 +496,14 @@ def _carthago_row(lot: Lot, fichier: str) -> dict:
     g = c[c["FICHIER"].astype(str) == fichier]
     if g.empty:
         return {}
+    candidats = [str(v) for v in (g["CARTHAGO_NUM_DOM_RAW"] if "CARTHAGO_NUM_DOM_RAW" in g.columns else [])
+                 if not is_blank(v)]
     if "REFERENCE_EXACT_MATCH" in g.columns:
         ex = g[g["REFERENCE_EXACT_MATCH"].map(lambda v: str(v).strip().upper() in ("TRUE", "1", "VRAI"))]
         if not ex.empty:
             g = ex
     car = {k: (None if is_blank(v) else v) for k, v in g.iloc[0].to_dict().items()}
+    car["_CANDIDATS"] = list(dict.fromkeys(candidats))  # toutes les domiciliations Carthago du client
     if lot.agences and not car.get("CARTHAGO_AGENCE"):
         cl = siege_racine(car.get("CARTHAGO_CLIENT") or car.get("SIEGE_RACINE")) or digits(car.get("CARTHAGO_CLIENT"))
         ref = car.get("CARTHAGO_NUM_DOM_RAW") or car.get("CARTHAGO_NUM_DOM_NORMALIZED")
@@ -551,7 +554,8 @@ def _cell(lot: Lot, lg: Ligne, col: str, row: dict, g, car: dict) -> dict:
             v = row.get("NUMERO_DOMICILIATION_PROPOSE")
         if spec[1] == "CARTHAGO_CLIENT" and is_blank(v) and _txt(row.get("CARTHAGO_CLIENT_MATCH")) in ("True", "TRUE", "1"):
             v = row.get("SIEGE_RACINE")
-        base.update(present=True, value=_txt(v), raw=_txt(v), carthago_status=status)
+        base.update(present=True, value=_txt(v), raw=_txt(v), carthago_status=status,
+                    candidats=car.get("_CANDIDATS", []))
         if lg.key == "domref" and status and status not in CARTHAGO_OK:
             base["issues"].append(("verif" if status in CARTHAGO_A_VERIFIER else "bloq",
                                    f"Carthago : {CARTHAGO_MSG.get(status, status)}"))
@@ -630,8 +634,35 @@ def _value_issues(lg: Ligne, col: str, cell: dict) -> list[tuple[str, str]]:
     return []
 
 
+CARTHAGO_RECALCUL = {"NUMERO_DOMICILIATION_NOT_NORMALIZABLE", "NO_EXACT_DOMICILIATION_REFERENCE_MATCH"}
+
+
+def _domref_recalcul(cells: dict) -> None:
+    """La Partie 2 compare le n° de domiciliation du contrat de travail (CTR) aux domiciliations Carthago
+    du client. Si le CTR était vide ou mal lu, son statut reste « illisible » / « aucune correspondance »
+    même après correction : l'App refait la comparaison sur la valeur CTR courante (lue ou corrigée)."""
+    car, ctr = cells["CARTHAGO"], cells["CTR"]
+    if car.get("carthago_status") not in CARTHAGO_RECALCUL:
+        return
+    car["issues"] = [i for i in car["issues"] if not i[1].startswith("Carthago :")]
+    v = ctr.get("value")
+    if is_blank(v) or not dom_ref_compact(v):
+        car["issues"].append(("bloq", "N° de domiciliation absent ou illisible sur le contrat de travail (CTR) : "
+                                      "corriger la case CTR avec le n° du contrat pour le comparer à Carthago"))
+        return
+    cands = car.get("candidats") or ([car["value"]] if car.get("value") else [])
+    hit = next((c for c in cands if dom_ref_compact(c) == dom_ref_compact(v)), None)
+    if hit:
+        car.update(value=hit, raw=hit, recalcul=True)
+    else:
+        car["issues"].append(("bloq", f"Aucune domiciliation Carthago du client avec le n° du contrat "
+                                      f"({dom_ref_compact(v)})" + (f" — Carthago : {', '.join(cands)}" if cands else "")))
+
+
 def _cross_issues(lg: Ligne, cells: dict, ctx: dict) -> None:
     """Règles entre lignes, sur les valeurs courantes (après corrections). ctx[ligne][col] = valeur."""
+    if lg.key == "domref":
+        _domref_recalcul(cells)
     if lg.key == "part":
         part, sal = parse_amount(cells["CTS"].get("value")), parse_amount(ctx.get("salaire", {}).get("CTS"))
         pct = float(os.environ.get("TLONE_PLAFOND_PCT_NET", "0.95"))

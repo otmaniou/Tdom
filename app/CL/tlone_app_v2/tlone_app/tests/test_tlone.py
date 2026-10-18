@@ -625,3 +625,67 @@ def test_worker_reconnait_les_vrais_notebooks(env):
         assert model and w.cfg < model[0] < min(w.process), step     # config -> modèle -> traitement
         assert len(w.process) == n_proc and "GLOB_PDF_CASE_INSENSITIVE" in w.patches
         assert "MAX_PDFS" in w.nb.cells[w.cfg].source or step == "ov_extract"
+
+
+def test_worker_signal_independant_du_fuseau(env):
+    """L'App et le workspace peuvent avoir des fuseaux différents : l'âge du signal vient de l'epoch."""
+    import json as _json
+    import time as _time
+    from tlone import worker
+    _, s = env
+    hb = worker.heartbeat_path(s)
+    hb.parent.mkdir(parents=True, exist_ok=True)
+    hb.write_text(_json.dumps({"ts": "2026-10-18T10:34:00+05:00", "epoch": _time.time(), "host": "ws",
+                               "state": "ATTENTE", "current": None, "warm": {}}))
+    assert worker.worker_state(s)["host"] == "ws"
+    hb.write_text(_json.dumps({"ts": "x", "epoch": _time.time() - 600, "host": "ws", "state": "ATTENTE"}))
+    assert worker.worker_state(s) is None
+    assert "il y a 600 s" in worker.worker_absent_text(s)
+    hb.unlink()
+    assert worker.worker_absent_text(s).startswith("non démarré")
+
+
+def test_domref_recontrole_apres_lecture_ctr_vide():
+    """Partie 2 « n° illisible » (CTR vide au moment du run) : l'App recompare avec la valeur CTR courante."""
+    from tlone import matrice as mx
+    def cells(ctr, status="NUMERO_DOMICILIATION_NOT_NORMALIZABLE", cands=("271901|2019.3|40|002031|DZD",)):
+        return {"CTR": {"value": ctr, "issues": []},
+                "CARTHAGO": {"value": cands[0], "carthago_status": status, "candidats": list(cands),
+                             "issues": [("bloq", "Carthago : n° de domiciliation illisible")]}}
+    c = cells("27-19-01 | 2019.3 | 40 | 002031 | DZD")          # n° du contrat = Carthago
+    mx._domref_recalcul(c)
+    assert c["CARTHAGO"]["issues"] == [] and c["CARTHAGO"]["recalcul"]
+    c = cells(None)                                             # contrat toujours vide
+    mx._domref_recalcul(c)
+    assert "contrat de travail (CTR)" in c["CARTHAGO"]["issues"][0][1]
+    c = cells("271901201934000999DZD", status="NO_EXACT_DOMICILIATION_REFERENCE_MATCH")
+    mx._domref_recalcul(c)
+    assert c["CARTHAGO"]["issues"][0][0] == "bloq" and "Aucune domiciliation" in c["CARTHAGO"]["issues"][0][1]
+    c = cells("x", status="CLIENT_NOT_FOUND")                   # autres statuts : inchangés
+    mx._domref_recalcul(c)
+    assert c["CARTHAGO"]["issues"][0][1].startswith("Carthago :")
+
+
+def test_preflight_worker_utilise_l_environnement_du_worker(env, monkeypatch):
+    """En mode worker, les versions contrôlées sont celles du workspace du worker, pas du conteneur de l'App."""
+    import dataclasses
+    import json as _json
+    import time as _time
+    from tlone import preflight, worker
+    p, s = env
+    s = dataclasses.replace(s, run_mode="worker")
+    monkeypatch.setattr(preflight, "probe_python", lambda py, mods: {m: "5.20.1" for m in mods})  # conteneur App
+    mods = preflight.STEP_MODULES["ov_extract"]
+    hb = worker.heartbeat_path(s)
+    hb.parent.mkdir(parents=True, exist_ok=True)
+    hb.write_text(_json.dumps({"epoch": _time.time(), "ts": "x", "host": "ws", "state": "ATTENTE",
+                               "steps": ["dom_extract", "dom_post"], "warm": {},
+                               "env": {"ov_extract": {"python": "/opt/tf4/python",
+                                                      "versions": {**{m: "ok" for m in mods},
+                                                                   "transformers": "4.57.0"}}}}))
+    rows = {r["contrôle"]: r for r in preflight.check_step(s, "ov_extract")}
+    assert rows["transformers ov_extract (worker)"]["niveau"] == preflight.OK
+    assert "transformers ov_extract" not in rows                      # pas de sondage local
+    assert rows["Worker ov_extract"]["niveau"] == preflight.WARN      # modèle non préchargé : alerte seulement
+    assert not preflight.blocking(list(rows.values())) or all(
+        r["contrôle"] in ("PDF OV à traiter",) for r in preflight.blocking(list(rows.values())))

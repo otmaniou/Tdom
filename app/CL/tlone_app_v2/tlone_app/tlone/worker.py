@@ -47,18 +47,38 @@ def heartbeat_path(s: Settings) -> Path:
     return s.paths.runs_dir / "worker_heartbeat.json"
 
 
-def worker_state(s: Settings) -> dict | None:
-    """État du worker vu par l'App ; None s'il ne tourne pas (pas de battement récent)."""
+def worker_signal(s: Settings) -> dict | None:
+    """Dernier battement du worker, même ancien (None si jamais démarré ici) ; age_s en secondes.
+    L'âge vient de l'horloge epoch (indépendante du fuseau horaire de l'App et du workspace)."""
     p = heartbeat_path(s)
     if not p.exists():
         return None
     try:
         d = json.loads(p.read_text(encoding="utf-8"))
-        age = (datetime.now() - datetime.fromisoformat(d["ts"])).total_seconds()
+        if "epoch" in d:
+            age = time.time() - float(d["epoch"])
+        else:  # ancien format : heure locale du workspace
+            age = (datetime.now() - datetime.fromisoformat(d["ts"])).total_seconds()
         d["age_s"] = round(age)
-        return d if age <= HEARTBEAT_MAX_AGE_S else None
+        return d
     except Exception:
         return None
+
+
+def worker_state(s: Settings) -> dict | None:
+    """État du worker vu par l'App ; None s'il ne tourne pas (pas de battement récent)."""
+    d = worker_signal(s)
+    return d if d and abs(d["age_s"]) <= HEARTBEAT_MAX_AGE_S else None
+
+
+def worker_absent_text(s: Settings) -> str:
+    """Pourquoi le worker est vu comme arrêté (pour l'App)."""
+    d = worker_signal(s)
+    if not d:
+        return f"non démarré (aucun signal dans {heartbeat_path(s).parent})"
+    if d.get("state") == "ARRET":
+        return f"arrêté sur {d.get('host')}"
+    return f"dernier signal il y a {d['age_s']} s ({d.get('host')}, {d.get('ts')})"
 
 
 def enqueue(s: Settings, rec: dict) -> Path:
@@ -170,15 +190,28 @@ class Worker:
         self.warm: dict[str, WarmNotebook] = {}
         self.current = None
         self.done = 0
+        self.env: dict = {}
+
+    def probe_env(self) -> dict:
+        """Versions des bibliothèques vues PAR LE WORKER (là où tournent les notebooks) : l'App s'en sert
+        pour ses prérequis au lieu de sonder son propre conteneur, qui peut différer."""
+        from .preflight import STEP_MODULES, probe_python
+        out = {}
+        for st in dict.fromkeys(list(self.steps) + ["dom_post", "ov_extract", "dom_extract"]):
+            py = self.pythons.get(st) or self.s.step_runtime(st)["python"]
+            r = probe_python(py, STEP_MODULES[st]) if Path(py).exists() else None
+            out[st] = {"python": py, "versions": r}
+        self.env = out
+        return out
 
     def beat(self, state: str = "ATTENTE") -> None:
         p = heartbeat_path(self.s)
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(json.dumps({
-            "ts": datetime.now().isoformat(timespec="seconds"), "host": socket.gethostname(), "pid": os.getpid(),
+            "ts": datetime.now().astimezone().isoformat(timespec="seconds"), "epoch": time.time(), "host": socket.gethostname(), "pid": os.getpid(),
             "state": state, "current": self.current, "done": self.done, "steps": list(self.steps) + ["dom_post"],
             "warm": {k: {"loaded_at": w.loaded_at, "load_seconds": w.load_seconds} for k, w in self.warm.items()},
-            "app_dir": str(APP_DIR)}, ensure_ascii=False), encoding="utf-8")
+            "app_dir": str(APP_DIR), "env": self.env}, ensure_ascii=False), encoding="utf-8")
 
     def _status(self, run_id: str, **kw) -> None:
         nbrunner._write_status(self.s.paths.runs_dir / f"{run_id}.status.json", run_id=run_id, **kw)
@@ -244,6 +277,10 @@ class Worker:
     def loop(self, once: bool = False) -> None:
         print(f"[worker] TL-One — données {self.s.paths.data_root} — étapes {self.steps} — Ctrl+C pour arrêter",
               flush=True)
+        self.probe_env()
+        for st, e in self.env.items():
+            v = e["versions"] or {}
+            print(f"[worker] {st} : {e['python']} — transformers {v.get('transformers')}", flush=True)
         if self.prewarm:
             for st in self.steps:
                 w = WarmNotebook(self.s, st, self.pythons.get(st))

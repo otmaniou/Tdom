@@ -201,7 +201,11 @@ def _cell_infos(P, m, x, lg, cell, lk, col):
     if cell.get("a_extraire"):
         st.info("Donnée demandée par l'agence mais pas encore extraite par la Partie 1 (à ajouter au prompt).")
     if cell.get("carthago_status"):
-        info.append(("Statut Carthago", mx.CARTHAGO_MSG.get(cell["carthago_status"], cell["carthago_status"])))
+        info.append(("Statut Carthago (Partie 2)", mx.CARTHAGO_MSG.get(cell["carthago_status"], cell["carthago_status"])))
+        if cell.get("recalcul"):
+            info.append(("Recontrôle App", "n° du contrat (CTR) identique à une domiciliation Carthago du client ✓"))
+        if cell.get("candidats"):
+            info.append(("Domiciliations Carthago du client", " | ".join(cell["candidats"])))
     st.dataframe(pd.DataFrame([(k, "" if is_blank(v) else str(v)) for k, v in info], columns=["", "Valeur"]),
                  hide_index=True, **_W())
     for kind, msg in cell["issues"]:
@@ -219,8 +223,10 @@ def _cell_infos(P, m, x, lg, cell, lk, col):
     decided = m["decision"] is not None
     k = f"{fichier}|{lk}|{col}"
     if col == "CARTHAGO" and not decided:
-        st.info("CarthagoDom est un référentiel : il ne se corrige pas ici. Mettez à jour l'export Carthago "
-                "(onglet ① Traitement) puis relancez la Partie 2, ou rejetez le dossier.")
+        st.info("CarthagoDom est un référentiel : il ne se corrige pas ici. Si le n° lu sur le contrat est faux "
+                "ou vide, corrigez la case **CTR** de cette ligne : l'App refait aussitôt la comparaison avec "
+                "Carthago. Sinon mettez à jour l'export Carthago (onglet ① Traitement) et relancez la Partie 2, "
+                "ou rejetez le dossier.")
         decided = True
     if not decided:
         if lg.kind == "bool":

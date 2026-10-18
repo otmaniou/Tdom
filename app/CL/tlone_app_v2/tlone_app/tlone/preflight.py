@@ -126,11 +126,11 @@ def check_general(s: Settings) -> list[dict]:
 
     rows.append(_row(OK, "Mode d'exécution", s.run_mode))
     if s.run_mode == "worker":
-        from .worker import worker_state
+        from .worker import worker_absent_text, worker_state
         w = worker_state(s)
         rows.append(_row(OK if w else KO, "Worker GPU",
                          f"actif sur {w['host']} — {w['state']} — modèles chargés : {', '.join(w['warm']) or 'aucun'}"
-                         if w else "non démarré",
+                         if w else worker_absent_text(s),
                          "" if w else "Dans un workspace GPU : /opt/conda/envs/tlone-tf4/bin/python "
                                       f"{APP_DIR}/run_worker.py --prewarm"))
     if s.run_mode == "domino":
@@ -171,6 +171,20 @@ def check_carthago(path: Path) -> list[dict]:
     return rows
 
 
+def _lib_rows(step: str, py: str, r: dict | None, where: str) -> list[dict]:
+    if r is None:
+        return [_row(KO, f"Python {step}{where}", py, "Interpréteur inutilisable")]
+    mods = STEP_MODULES[step]
+    miss = [m for m in mods if not r.get(m)]
+    rows = [_row(KO if miss else OK, f"Bibliothèques {step}{where}", py, f"Manquent : {', '.join(miss)}" if miss else "")]
+    want = TRANSFORMERS_PREFIX.get(step)
+    if want and r.get("transformers"):
+        good = str(r["transformers"]).startswith(want)
+        rows.append(_row(OK if good else KO, f"transformers {step}{where}", r["transformers"],
+                         "" if good else f"Attendu {want}x"))
+    return rows
+
+
 def check_step(s: Settings, step: str) -> list[dict]:
     rows = []
     rt = s.step_runtime(step)
@@ -185,27 +199,30 @@ def check_step(s: Settings, step: str) -> list[dict]:
             rows.append(_row(KO, "Export CarthagoDom", "absent", "Déposer « Dossier de domiciliation.xlsx »"))
 
     py = rt["python"]
-    if not Path(py).exists():
+    wenv = None
+    if s.run_mode == "worker":  # les notebooks tournent dans le workspace du worker : on contrôle SON environnement
+        from .worker import worker_state
+        w = worker_state(s)
+        wenv = (w or {}).get("env") or None
+    if wenv is not None:
+        e = wenv.get(step)
+        if e is not None:
+            rows += _lib_rows(step, e["python"], e.get("versions"), " (worker)")
+        if STEPS[step]["gpu"] and step not in (w or {}).get("steps", []):
+            rows.append(_row(WARN, f"Worker {step}", "modèle non préchargé par le worker",
+                             "Fonctionne, mais le modèle est rechargé à chaque demande. Pour une démo : relancer le "
+                             "worker avec --steps dom_extract,ov_extract --prewarm"))
+    elif s.run_mode == "worker":
+        pass  # worker absent : le point bloquant « Worker GPU » ci-dessous suffit
+    elif not Path(py).exists():
         rows.append(_row(KO, f"Python {step}", py, f"Interpréteur absent : TLONE_{step.upper()}_PYTHON"))
     else:
-        mods = STEP_MODULES[step]
-        r = probe_python(py, mods)
-        if r is None:
-            rows.append(_row(KO, f"Python {step}", py, "Interpréteur inutilisable"))
-        else:
-            miss = [m for m in mods if not r.get(m)]
-            rows.append(_row(KO if miss else OK, f"Bibliothèques {step}", py,
-                             f"Manquent : {', '.join(miss)}" if miss else ""))
-            want = TRANSFORMERS_PREFIX.get(step)
-            if want and r.get("transformers"):
-                good = str(r["transformers"]).startswith(want)
-                rows.append(_row(OK if good else KO, f"transformers {step}", r["transformers"],
-                                 "" if good else f"Attendu {want}x"))
+        rows += _lib_rows(step, py, probe_python(py, STEP_MODULES[step]), "")
 
     if s.run_mode == "worker":
-        from .worker import worker_state
+        from .worker import worker_absent_text, worker_state
         if not worker_state(s):
-            rows.append(_row(KO, "Worker GPU", "non démarré",
+            rows.append(_row(KO, "Worker GPU", worker_absent_text(s),
                              f"Lancer dans un workspace GPU : python {APP_DIR}/run_worker.py --prewarm"))
     if STEPS[step]["gpu"]:
         model = rt["model"] or MODEL_DEFAULT[step]

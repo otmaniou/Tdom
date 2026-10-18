@@ -28,14 +28,15 @@ def setup(title: str):
         st.caption(f"Données : `{s.paths.data_root}`")
         st.caption(f"Utilisateur : **{current_user()}**")
         if s.run_mode == "worker":
-            from .worker import worker_state
+            from .worker import worker_absent_text, worker_state
             w = worker_state(s)
             if w:
                 st.success(f"Worker GPU actif ({w['state'].lower()})"
                            + (f" — {w['current']}" if w.get("current") else "")
                            + (f" — modèles : {', '.join(w['warm'])}" if w.get("warm") else ""))
             else:
-                st.error("Worker GPU arrêté : lancer run_worker.py dans un workspace GPU")
+                st.error(f"Worker GPU : {worker_absent_text(s)}. Lancer run_worker.py dans un workspace GPU"
+                         " (même dossier de données), puis Rafraîchir.")
         gen = preflight.blocking(preflight.check_general(s))
         if gen:
             st.error(f"{len(gen)} prérequis bloquant(s) — voir l'Accueil")
