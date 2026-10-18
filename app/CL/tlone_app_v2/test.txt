@@ -91,3 +91,9 @@ cat /mnt/code/app.sh | tail -1
 
 
 export TLONE_RUN_MODE=worker /opt/conda/envs/tlone-tf4/bin/python run_worker.py --steps dom_extract --prewarm
+
+
+
+
+
+cat $TLONE_DATA_ROOT/document_pipeline/runs/worker_heartbeat.json; echo; date; date -u
