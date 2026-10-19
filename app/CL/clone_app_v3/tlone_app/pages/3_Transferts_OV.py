@@ -61,7 +61,12 @@ if not audits:
 
 
 with tab_ctl:
-    src = st.selectbox("Lot d'extraction", audits, format_func=lambda p: f"{p.name} ({ui.mtime(p)})", key="ov_lot")
+    # un nouveau classeur (extraction terminée) devient le lot affiché, même si un ancien était sélectionné
+    if st.session_state.get("ov_lot_newest") != str(audits[0]):
+        st.session_state["ov_lot_newest"] = str(audits[0])
+        st.session_state["ov_lot"] = audits[0]
+    src = st.selectbox("Lot d'extraction", audits, format_func=lambda p: f"{p.name} ({ui.mtime(p)})"
+                       + (" — le plus récent" if p == audits[0] else ""), key="ov_lot")
     st.session_state["tr_src"] = str(src)
     if PL.empty:
         st.warning("Planning TL non généré : tous les dossiers seront NON_CONFORME (T04).")
