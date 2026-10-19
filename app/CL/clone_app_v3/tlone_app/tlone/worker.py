@@ -32,6 +32,7 @@ GPU_STEPS = ("dom_extract", "ov_extract")
 # Cellules ré-exécutées à chaque demande (repérées par leur contenu, pas par leur numéro).
 CONFIG_MARKER = "pdfs = sorted("
 MODEL_MARKER = "from_pretrained"
+LOOP_MARKERS = {"ov_extract": ("for pdf_path in pdfs", "pdf_path in enumerate(pdfs")}
 PROCESS_MARKERS = {
     "dom_extract": ("if not pdfs:",),
     "ov_extract": ("for pdf_path in pdfs", "pdf_path in enumerate(pdfs", "pd.read_excel(EXCEL_PATH"),
@@ -133,6 +134,9 @@ class WarmNotebook:
         self.process = [i for i in code if any(m in self.nb.cells[i].source for m in PROCESS_MARKERS[step])]
         if not self.process:
             raise RuntimeError(f"{step} : cellule de traitement introuvable dans le notebook")
+        loops = LOOP_MARKERS.get(step)
+        if loops and not any(m in self.nb.cells[i].source for i in self.process for m in loops):
+            raise RuntimeError(f"{step} : boucle de traitement des PDF introuvable dans {s.notebooks[step].name}")
         self.client = NotebookClient(self.nb, timeout=timeout, kernel_name=kernel_for(self.python),
                                      resources={"metadata": {"path": str(s.paths.data_root)}})
         self.loaded_at = None
@@ -159,7 +163,8 @@ class WarmNotebook:
                 self._run(i, log)
         self.loaded_at = datetime.now().isoformat(timespec="seconds")
         self.load_seconds = round(time.time() - t0, 1)
-        log(f"[worker] {self.step} prêt (modèle chargé) en {self.load_seconds} s")
+        log(f"[worker] {self.step} prêt (modèle chargé) en {self.load_seconds} s — notebook "
+            f"{self.s.notebooks[self.step].name}, cellules de traitement {self.process}")
 
     def run(self, max_items: int | None, log) -> None:
         # cellule de configuration re-patchée avec la limite N de la demande, puis traitement
@@ -248,6 +253,13 @@ class Worker:
             w = self.warm[step]
             t0 = time.time()
             w.run(req.get("max_items"), log)
+            if step == "ov_extract":   # un run « réussi » doit avoir produit un nouveau classeur audit_transferts
+                from .transfers import latest_audit
+                new = [p for p in latest_audit(self.s.paths.tr_out) if p.stat().st_mtime >= t0 - 1]
+                if not new:
+                    raise RuntimeError("Aucun classeur audit_transferts_*.xlsx produit par ce run : la boucle de "
+                                       "traitement du notebook n'a pas été exécutée (worker à relancer ?)")
+                log(f"[worker] classeur produit : {new[0].name}")
             self._status(run_id, status="SUCCEEDED", patches=w.patches, duree_traitement_s=round(time.time() - t0, 1),
                          modele_charge_le=w.loaded_at)
         except Exception as exc:  # noqa: BLE001

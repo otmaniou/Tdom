@@ -199,11 +199,16 @@ def check_step(s: Settings, step: str) -> list[dict]:
             rows.append(_row(KO, "Export CarthagoDom", "absent", "Déposer « Dossier de domiciliation.xlsx »"))
 
     py = rt["python"]
-    wenv = None
+    wenv, w = None, None
     if s.run_mode == "worker":  # les notebooks tournent dans le workspace du worker : on contrôle SON environnement
         from .worker import worker_state
         w = worker_state(s)
         wenv = (w or {}).get("env") or None
+    if w and w.get("app_dir") and str(w["app_dir"]) != str(APP_DIR):
+        rows.append(_row(KO, "Dossier du worker", f"worker lancé depuis {w['app_dir']}",
+                         f"L'App tourne depuis {APP_DIR} : le worker exécuterait une autre version (notebook, "
+                         f"contrôles). Ctrl+C puis : cd {APP_DIR} && /opt/conda/envs/tlone-tf4/bin/python "
+                         "run_worker.py --steps dom_extract,ov_extract --prewarm"))
     if wenv is not None:
         e = wenv.get(step)
         err = ((w or {}).get("errors") or {}).get(step)
