@@ -19,5 +19,6 @@ RUN /opt/conda/envs/tlone-tf4/bin/python -c "import streamlit, fitz, nbclient, n
    /opt/conda/envs/tlone-tf4/bin/python -c "import transformers; print(transformers.__version__)"
 
 
-   cd /mnt/code/tlone_app_v2
-   /opt/conda/envs/tlone-tf4/bin/python run_worker.py --steps dom_extract,ov_extract --prewarm
+
+cd /mnt/code/tlone_app_v2
+/opt/conda/envs/tlone-tf4/bin/python run_worker.py --steps dom_extract,ov_extract --prewarm
