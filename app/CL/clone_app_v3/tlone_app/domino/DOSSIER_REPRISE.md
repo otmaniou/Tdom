@@ -41,7 +41,7 @@ Notebooks validés (jamais modifiés sur disque ; l'app les exécute avec des pa
   `python3 verifier_copie.py --reparer` (empreintes normalisées `MANIFEST_NORM.txt`, attendu 38/38).
 - Copie vers le Mac : `SendUserFile` puis `device_commit_files` (fileUuid, force) ; contrôle `md5sum -c MANIFEST.md5` dans
   `$HOME/mnt/projet_tl_one/tlone_app` (VM du Mac) et `python3 verifier_copie.py`.
-- Tests : 50 passent (`python3 -m pytest -q tests`).
+- Tests : 51 passent (`python3 -m pytest -q tests`).
 
 **Contraintes permanentes**
 - Jamais de Dockerfile dans le projet ni en photo (jeton Artifactory).
@@ -110,8 +110,13 @@ Notebooks validés (jamais modifiés sur disque ; l'app les exécute avec des pa
   (matrice DOM) + signataire Annexe I (v27), un par ligne (`TLONE_VIGILANCE_INDIVIDUS=entier|diese`).
 - Regroupement : un fichier par client + bénéficiaire (nom + IBAN + SWIFT).
 - Retours (xlsx multiples ou ZIP, lus en mémoire) : RAS / HIT / KO plateforme indisponible / rubrique non renseignée /
-  vide / inconnu ; contrôles de structure (client, individus, décalage des rangs, doublon). HIT ou « à vérifier » →
-  décision motivée (levée, ou confirmation = TL rejeté). Registre : seuls les TL RAS ou HIT levé (`STATUT_VIGILANCE`).
+  vide / inconnu ; contrôles de structure (client, individus, décalage des rangs, doublon). Fiche retournée conservée
+  (`vigilance/retours/fichiers/`). **Analyse des HIT dans TL-One** : fiche affichée, chaque point HIT / à vérifier
+  reçoit « avéré » ou « non avéré » + commentaire obligatoire ; tous non avérés → TL libéré (HIT_LEVE), un avéré →
+  alerte confirmée et TL rejeté. Analyse écrite dans la colonne COMMENTAIRES → fiche annotée (`vigilance/analyses/`)
+  à archiver. Registre : seuls les TL RAS ou HIT levé (`STATUT_VIGILANCE`).
+- Granularité retenue : une vigilance par client + bénéficiaire et par lot (pas de réutilisation d'un lot à l'autre).
+  En attente : archivage CarthagoTrade (une pièce par TL ?, nommage), durée de validité éventuelle d'un RAS.
 - Journal `04_transferts/vigilance/journal_vigilance.jsonl` ; envois `vigilance/envois/VIG_*` ; résultats `vigilance/retours/`.
 - À confirmer : format des individus (nom complet ou prénom#nom), format de la réf dossier, nom exact des fichiers retour.
 
@@ -159,5 +164,5 @@ Chaque lot : tests automatiques, `MANIFEST.md5` + `MANIFEST_NORM.txt` régénér
 ## 7. Reprise dans une nouvelle session
 
 1. Lire ce document (projet claude.ai « projet_tl_one » ou `domino/DOSSIER_REPRISE.md`).
-2. Récupérer l'app depuis le Mac (dossier `tlone_app`), lancer `python3 -m pytest -q tests` (50 attendus) et `python3 verifier_copie.py`.
+2. Récupérer l'app depuis le Mac (dossier `tlone_app`), lancer `python3 -m pytest -q tests` (51 attendus) et `python3 verifier_copie.py`.
 3. Annoncer le lot attaqué et ses questions ouvertes avant de coder.
