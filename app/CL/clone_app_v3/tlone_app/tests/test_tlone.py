@@ -625,6 +625,9 @@ def test_worker_reconnait_les_vrais_notebooks(env):
         assert model and w.cfg < model[0] < min(w.process), step     # config -> modèle -> traitement
         assert len(w.process) == n_proc and "GLOB_PDF_CASE_INSENSITIVE" in w.patches
         assert "MAX_PDFS" in w.nb.cells[w.cfg].source or step == "ov_extract"
+        if step == "ov_extract":       # v27 : la boucle des PDF fait partie du traitement ; INPUT_DIR redirigé
+            assert any("pdf_path in enumerate(pdfs" in w.nb.cells[i].source for i in w.process)
+            assert "INPUT_DIR=transferts_in" in w.patches and "NO_PIP_INSTALL" in w.patches
 
 
 def test_worker_signal_independant_du_fuseau(env):
@@ -933,3 +936,19 @@ def test_vigilance_analyse_hit_dans_tlone(tmp_path):
     st = v.statuses(v.read_journal(jp))
     assert st["f1"]["statut"] == "HIT_LEVE" and st["f2"]["statut"] == "HIT_CONFIRME"
     assert v.eligible(st) == {"f1"}
+
+
+def test_preflight_worker_autre_dossier(env):
+    """Worker lancé depuis un autre dossier de version (ex. tlone_app_v2 alors que l'App tourne en v3) : bloquant."""
+    import dataclasses
+    import json as _json
+    import time as _time
+    from tlone import preflight, worker
+    _, s = env
+    s = dataclasses.replace(s, run_mode="worker")
+    hb = worker.heartbeat_path(s)
+    hb.parent.mkdir(parents=True, exist_ok=True)
+    hb.write_text(_json.dumps({"epoch": _time.time(), "ts": "x", "host": "ws", "state": "ATTENTE", "warm": {},
+                               "steps": ["ov_extract"], "app_dir": "/mnt/code/tlone_app_v2", "env": {}}))
+    rows = {r["contrôle"]: r for r in preflight.check_step(s, "ov_extract")}
+    assert rows["Dossier du worker"]["niveau"] == preflight.KO
