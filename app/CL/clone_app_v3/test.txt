@@ -1,1 +1,2 @@
-
+ls -lt $TLONE_DATA_ROOT/transferts_out | head -5
+ls -lt $TLONE_DATA_ROOT/transferts_out/json_dossiers | head -5
