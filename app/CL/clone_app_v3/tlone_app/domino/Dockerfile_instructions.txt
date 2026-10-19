@@ -1,0 +1,31 @@
+# TL-One — lignes à AJOUTER au Dockerfile de l'environnement « tlone » (révision 7)
+#
+# Le Dockerfile de base est celui produit par la chaîne DWS (dws-dockerfile-create) avec
+# les deux environnements conda :
+#   /opt/conda/envs/tlone-tf4  -> app Streamlit + Partie 2 + v26 OV (Qwen2.5-VL-7B, transformers 4.57.0)
+#   /opt/conda/envs/tlone-tf5  -> Partie 1 DOM (Qwen3.8-27B-FP8, transformers 5.x)
+# NE PAS mettre ce Dockerfile dans le projet : il contient le jeton Artifactory.
+#
+# Révision 7 : en révision 6, transformers n'était pas fixé pour tlone-tf4 -> 5.20.1 installé,
+# et le notebook v26 échoue (ImportError AutoModelForVision2Seq). On le fixe à 4.57.0 AVANT le verrou.
+#
+# À coller juste APRÈS la ligne :
+#   RUN conda env create -v -f /tmp/env-tf4.yml && conda env create -v -f /tmp/env-tf5.yml
+# (si les lignes de la révision 6 sont déjà là, les REMPLACER par celles-ci)
+
+# --- 1. tlone-tf4 : transformers 4.57.0 (v26 OV). pip ajuste tokenizers / huggingface_hub compatibles ---
+RUN /opt/conda/envs/tlone-tf4/bin/pip install --no-cache-dir "transformers==4.57.0" && \
+    /opt/conda/envs/tlone-tf4/bin/pip check || true
+
+# --- 2. Paquets de l'application TL-One, sans modifier torch / transformers ---
+RUN for E in tlone-tf4 tlone-tf5; do \
+      /opt/conda/envs/$E/bin/pip freeze | grep -iE '^(torch|torchvision|transformers|tokenizers|huggingface.hub|accelerate|safetensors|numpy|pillow|protobuf)==' > /tmp/verrou-$E.txt; \
+    done && \
+    /opt/conda/envs/tlone-tf4/bin/pip install --no-cache-dir -c /tmp/verrou-tlone-tf4.txt \
+      "streamlit==1.*" pandas openpyxl pymupdf requests nbclient nbformat ipykernel pytest && \
+    /opt/conda/envs/tlone-tf5/bin/pip install --no-cache-dir -c /tmp/verrou-tlone-tf5.txt \
+      pandas openpyxl pymupdf requests nbclient nbformat ipykernel
+
+# --- 3. Contrôle : le build ÉCHOUE si un paquet manque ou si transformers n'a pas la bonne version ---
+RUN /opt/conda/envs/tlone-tf4/bin/python -c "import streamlit, fitz, nbclient, nbformat, openpyxl, pandas, requests, ipykernel, transformers, torch; assert transformers.__version__=='4.57.0', transformers.__version__; from transformers import AutoProcessor, AutoModelForVision2Seq; print('tf4 OK', transformers.__version__, torch.__version__)" && \
+    /opt/conda/envs/tlone-tf5/bin/python -c "import fitz, nbclient, nbformat, openpyxl, pandas, ipykernel, transformers, torch; assert transformers.__version__.startswith('5.'), transformers.__version__; print('tf5 OK', transformers.__version__, torch.__version__)"
