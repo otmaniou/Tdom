@@ -194,12 +194,14 @@ def statuses(journal: list[dict]) -> dict[str, dict]:
             for f in (u or {}).get("fichiers", []):
                 if unit_of.get(f) == ev["uid"]:
                     st[f] = {"statut": ev["statut"], "uid": ev["uid"], "lot": u.get("lot"), "ts": ev["ts"],
-                             "detail": ev.get("detail"), "fichier_retour": ev.get("fichier_retour")}
+                             "detail": ev.get("detail"), "fichier_retour": ev.get("fichier_retour"),
+                             "chemin": ev.get("chemin")}
         elif a == "DECISION":
             for f in ev.get("fichiers", []):
                 if f in st and st[f]["statut"] in STATUTS_A_DECIDER:
                     st[f] = dict(st[f], statut="HIT_LEVE" if ev["decision"] == "LEVEE" else "HIT_CONFIRME",
-                                 motif=ev.get("motif"), decide_par=ev.get("user"), decide_le=ev["ts"])
+                                 motif=ev.get("motif"), decide_par=ev.get("user"), decide_le=ev["ts"],
+                                 fiche_annotee=ev.get("fiche_annotee"))
     return st
 
 
@@ -430,9 +432,14 @@ def import_returns(uploads: list[tuple[str, bytes]], journal: list[dict], jpath:
         if seen[u["uid"]] > 1:
             ctl.append("Retour reçu plusieurs fois pour cette unité")
         c = Counter(x[4] for x in detail)
+        keep = out_dir / "fichiers"                     # fiche retournée conservée : consultation et annotation
+        keep.mkdir(parents=True, exist_ok=True)
+        chemin = keep / f"{u['uid']}_{datetime.now():%Y%m%d_%H%M%S}_{safe_name(Path(name).stem)}.xlsx"
+        chemin.write_bytes(data)
         append(jpath, user, "RETOUR", uid=u["uid"], lot=u.get("lot"), statut=statut, fichier_retour=name,
                detail={k: c[k] for k in ("RAS", "HIT", "KO", "INFO", "MANQUANT", "INCONNU")}, controles=ctl,
-               hits=[x for x in detail if x[4] == "HIT"])
+               hits=[x for x in detail if x[4] == "HIT"], chemin=str(chemin),
+               points=[x for x in detail if x[4] in ("HIT", "MANQUANT", "INCONNU")])
         synth.append({"Réf dossier": u["ref"], "Client": u["client"], "Bénéficiaire": u["beneficiaire"] or "(client)",
                       "Statut": statut, "HIT": c["HIT"], "KO": c["KO"], "À vérifier": c["MANQUANT"] + c["INCONNU"],
                       "RAS": c["RAS"], "TL concernés": len(u["fichiers"]), "Contrôles": " | ".join(ctl),
@@ -458,6 +465,61 @@ def decide(jpath: Path, user: str, fichiers: list[str], decision: str, motif: st
     if not text(motif):
         raise ValueError("Motif obligatoire")
     return append(jpath, user, "DECISION", uid=uid, fichiers=fichiers, decision=decision, motif=motif.strip())
+
+
+VERDICTS = {"NON_AVERE": "Non avéré (faux positif)", "AVERE": "Avéré"}
+
+
+def annotate(data: bytes, verdicts: list[dict], user: str, ts: str) -> bytes:
+    """Fiche retournée + analyse du valideur dans la colonne COMMENTAIRES, sur la ligne de chaque point analysé."""
+    from openpyxl import load_workbook
+    from openpyxl.styles import Alignment, Font
+    wb = load_workbook(io.BytesIO(data))
+    ws = wb.worksheets[0]
+    rows = {norm(ws.cell(r, 1).value): r for r in range(1, ws.max_row + 1) if text(ws.cell(r, 1).value)}
+    par_ligne: dict[int, list[str]] = {}
+    for v in verdicts:
+        r = rows.get(norm(v["rubrique"]))
+        if not r:
+            continue
+        qui = f" — {v.get('valeur')}" if text(v.get("valeur")) else ""
+        par_ligne.setdefault(r, []).append(f"{'AVÉRÉ' if v['verdict'] == 'AVERE' else 'NON AVÉRÉ'}{qui} : "
+                                           f"{text(v['commentaire'])}")
+    for r, notes in par_ligne.items():
+        c = ws.cell(r, 5)
+        old = text(c.value)
+        c.value = "\n".join(([old] if old else []) + notes + [f"({user}, {ts[:16].replace('T', ' ')})"])
+        c.alignment = Alignment(wrap_text=True, vertical="top")
+        c.font = Font(bold=True, color="B3261E" if any(n.startswith("AVÉRÉ") for n in notes) else "1E6B3A")
+    b = io.BytesIO()
+    wb.save(b)
+    return b.getvalue()
+
+
+def analyse_points(jpath: Path, user: str, uid: str, fichiers: list[str], verdicts: list[dict],
+                   retour: Path | None, out_dir: Path) -> dict:
+    """Analyse des HIT / points à vérifier saisie dans TL-One.
+    Chaque point : verdict AVERE / NON_AVERE + commentaire obligatoire. Tous non avérés -> TL libéré (LEVEE) ;
+    au moins un avéré -> alerte confirmée (TL rejeté). La fiche annotée est conservée pour l'archivage."""
+    if not verdicts:
+        raise ValueError("Aucun point à analyser")
+    for v in verdicts:
+        if v.get("verdict") not in VERDICTS:
+            raise ValueError(f"{v.get('rubrique')} : choisir avéré ou non avéré")
+        if not text(v.get("commentaire")):
+            raise ValueError(f"{v.get('rubrique')} (rang {v.get('rang')}) : commentaire obligatoire")
+    decision = "CONFIRMEE" if any(v["verdict"] == "AVERE" for v in verdicts) else "LEVEE"
+    motif = " | ".join(f"{v['rubrique']}{' ' + str(v['valeur']) if v.get('valeur') else ''} : "
+                       f"{'avéré' if v['verdict'] == 'AVERE' else 'non avéré'} — {text(v['commentaire'])}"
+                       for v in verdicts)
+    ts = datetime.now().isoformat(timespec="seconds")
+    annotee = None
+    if retour and Path(retour).exists():
+        out_dir.mkdir(parents=True, exist_ok=True)
+        annotee = out_dir / f"{Path(retour).stem}_analyse.xlsx"
+        annotee.write_bytes(annotate(Path(retour).read_bytes(), verdicts, user, ts))
+    return append(jpath, user, "DECISION", uid=uid, fichiers=fichiers, decision=decision, motif=motif,
+                  verdicts=verdicts, fiche_annotee=str(annotee) if annotee else None)
 
 
 def candidates(decisions: pd.DataFrame, st: dict[str, dict]) -> list[str]:

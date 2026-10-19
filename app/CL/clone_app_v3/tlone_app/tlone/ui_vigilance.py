@@ -50,7 +50,8 @@ def _statut_frame(sy: pd.DataFrame, st_map: dict) -> pd.DataFrame:
         rows.append({"Statut": vg.LIBELLE_STATUT.get(v.get("statut")), "Client": r.get("NOM"),
                      "Bénéficiaire": r.get("BENEFICIAIRE"), "Période": r.get("PERIODE_TL"),
                      "Montant": r.get("MONTANT_OV"), "Lot": v.get("lot"), "Motif": v.get("motif"),
-                     "Fichier": r["FICHIER"]})
+                     "Analysé par": v.get("decide_par"), "Fichier": r["FICHIER"],
+                     "_annotee": v.get("fiche_annotee")})
     return pd.DataFrame(rows)
 
 
@@ -169,11 +170,14 @@ def render(P, s, A: pd.DataFrame, SY: pd.DataFrame, PL: pd.DataFrame):
                 st.dataframe(co, hide_index=True, **_W())
             st.download_button("⬇ Résultats détaillés (Excel)", path.read_bytes(), file_name=path.name)
 
-    # ---------- 3. décisions
+    # ---------- 3. analyse des HIT dans TL-One
     with t_dec:
         a_dec = [f for f in sy_val["FICHIER"] if (st_map.get(f) or {}).get("statut") in vg.STATUTS_A_DECIDER]
         if not a_dec:
-            st.success("Aucun HIT ni résultat à vérifier en attente de décision.")
+            st.success("Aucun HIT ni résultat à vérifier en attente d'analyse.")
+        st.caption("Pour chaque alerte : avéré ou non avéré, avec un commentaire. Tous les points non avérés → le TL est "
+                   "libéré. Un seul point avéré → l'alerte est confirmée et le TL rejeté. L'analyse est écrite dans la "
+                   "colonne COMMENTAIRES de la fiche (fiche annotée à archiver).")
         units = {}
         for f in a_dec:
             units.setdefault(st_map[f]["uid"], []).append(f)
@@ -181,36 +185,65 @@ def render(P, s, A: pd.DataFrame, SY: pd.DataFrame, PL: pd.DataFrame):
         for uid, fs in units.items():
             ev = last_ret.get(uid, {})
             r0 = SY[SY["FICHIER"] == fs[0]].iloc[0]
+            stat = st_map[fs[0]]["statut"]
             with st.container(border=True):
-                stat = st_map[fs[0]]["statut"]
-                st.markdown(f"**{'🔴 HIT' if stat == 'HIT' else '🟠 À vérifier'} — {r0.get('NOM')}** · bénéficiaire "
-                            f"{r0.get('BENEFICIAIRE') or '—'} · {len(fs)} TL")
-                hits = ev.get("hits") or []
-                if hits:
-                    st.dataframe(pd.DataFrame(hits, columns=["Rubrique", "Rang", "Valeur", "Résultat", "Statut",
-                                                             "Action", "Commentaire"]), hide_index=True, **_W())
+                st.markdown(f"#### {'🔴 HIT' if stat == 'HIT' else '🟠 À vérifier'} — {r0.get('NOM')}")
+                st.caption(f"Bénéficiaire {r0.get('BENEFICIAIRE') or '—'} · {len(fs)} TL : {', '.join(fs)}")
+                chemin = Path(ev["chemin"]) if ev.get("chemin") else None
+                if chemin and chemin.exists():
+                    fiche = vg.read_return(chemin.read_bytes())
+                    rows = [{"Rubrique": rb["rubrique"], "Valeur": rb["valeur"], "Résultat": rb["resultat"],
+                             "Commentaire": rb["commentaire"]} for rb in fiche["rubriques"]
+                            if rb["valeur"] or vg.classify(rb["resultat"])[0] != "INFO"]
+                    with st.expander("Fiche vigilance retournée", expanded=True):
+                        def _red(row):
+                            hit = any(vg.classify(x)[0] in ("HIT", "MANQUANT", "INCONNU")
+                                      for x in (vg.lines(row["Résultat"]) or [""]))
+                            return ["color: #B3261E; font-weight: 600" if hit else ""] * len(row)
+                        st.dataframe(pd.DataFrame(rows).style.apply(_red, axis=1), hide_index=True, **_W())
+                        st.download_button("⬇ Fiche retournée", chemin.read_bytes(), file_name=chemin.name,
+                                           key=f"vig_dl_{uid}")
                 for x in ev.get("controles") or []:
                     st.caption(f"⚠ {x}")
-                st.caption("TL : " + ", ".join(fs))
-                motif = st.text_area("Motif (obligatoire)", key=f"vig_m_{uid}", height=70)
-                b1, b2 = st.columns(2)
-                if b1.button("Lever l'alerte — le TL peut continuer", key=f"vig_l_{uid}"):
+                points = ev.get("points") or ev.get("hits") or []
+                with st.form(f"vig_form_{uid}"):
+                    verdicts = []
+                    for i, pt in enumerate(points):
+                        rub, rang, val, raw, stt = pt[0], pt[1], pt[2], pt[3], pt[4]
+                        st.markdown(f"**{rub}**" + (f" — {val}" if val else "") + f" · résultat : `{raw or 'vide'}`")
+                        c1, c2 = st.columns([1, 2])
+                        ver = c1.radio("Analyse", list(vg.VERDICTS), format_func=vg.VERDICTS.get, index=None,
+                                       key=f"vig_v_{uid}_{i}", horizontal=False)
+                        com = c2.text_area("Commentaire (obligatoire)", key=f"vig_t_{uid}_{i}", height=80,
+                                           placeholder="ex. homonyme : date de naissance et nationalité différentes")
+                        verdicts.append({"rubrique": rub, "rang": rang, "valeur": val, "resultat": raw,
+                                         "statut": stt, "verdict": ver, "commentaire": com})
+                    if not points:
+                        st.info("Aucun point détaillé : contrôles de structure à examiner.")
+                        com = st.text_area("Commentaire (obligatoire)", key=f"vig_t_{uid}_x")
+                        ver = st.radio("Analyse", list(vg.VERDICTS), format_func=vg.VERDICTS.get, index=None,
+                                       key=f"vig_v_{uid}_x")
+                        verdicts = [{"rubrique": "Contrôles de structure", "rang": 1, "valeur": "", "resultat": "",
+                                     "statut": "A_VERIFIER", "verdict": ver, "commentaire": com}]
+                    ok = st.form_submit_button("Enregistrer l'analyse", type="primary")
+                if ok:
                     try:
-                        vg.decide(jp, current_user(), fs, "LEVEE", motif, uid)
-                        audit(P.audit_log, "VIGILANCE_LEVEE", current_user(), uid=uid, tl=fs, motif=motif)
+                        evd = vg.analyse_points(jp, current_user(), uid, fs, verdicts, chemin,
+                                                P.vigilance_dir / "analyses")
+                        if evd["decision"] == "CONFIRMEE":
+                            ed = pd.DataFrame([{"FICHIER": f, "AUDIT_SOURCE": None, "DECISION": "REJETE",
+                                                "COMMENTAIRE": f"Vigilance : alerte avérée — {evd['motif']}"[:900]}
+                                               for f in fs])
+                            transfers.save_decisions(P.decisions_csv, ed, current_user())
+                        audit(P.audit_log, f"VIGILANCE_{evd['decision']}", current_user(), uid=uid, tl=fs,
+                              motif=evd["motif"])
+                        st.session_state["vig_msg"] = ("TL libéré(s) : alerte non avérée." if evd["decision"] == "LEVEE"
+                                                       else "Alerte avérée : TL rejeté(s).")
                         st.rerun()
                     except ValueError as exc:
                         st.error(str(exc))
-                if b2.button("Confirmer l'alerte — rejeter le(s) TL", key=f"vig_c_{uid}", type="primary"):
-                    try:
-                        vg.decide(jp, current_user(), fs, "CONFIRMEE", motif, uid)
-                        ed = pd.DataFrame([{"FICHIER": f, "AUDIT_SOURCE": None, "DECISION": "REJETE",
-                                            "COMMENTAIRE": f"Vigilance HIT confirmé : {motif.strip()}"} for f in fs])
-                        transfers.save_decisions(P.decisions_csv, ed, current_user())
-                        audit(P.audit_log, "VIGILANCE_CONFIRMEE", current_user(), uid=uid, tl=fs, motif=motif)
-                        st.rerun()
-                    except ValueError as exc:
-                        st.error(str(exc))
+        if st.session_state.get("vig_msg"):
+            st.success(st.session_state.pop("vig_msg"))
 
     # ---------- suivi
     with t_suivi:
@@ -218,10 +251,16 @@ def render(P, s, A: pd.DataFrame, SY: pd.DataFrame, PL: pd.DataFrame):
         if df.empty:
             st.info("Aucun TL validé dans ce lot d'extraction.")
         else:
-            st.dataframe(df, hide_index=True, **_W(), height=380,
+            st.dataframe(df.drop(columns=["_annotee"]), hide_index=True, **_W(), height=380,
                          column_config={"Montant": st.column_config.NumberColumn(format="%.2f")})
-            st.download_button("⬇ Suivi vigilance (Excel)", to_excel_bytes({"VIGILANCE": df}),
+            st.download_button("⬇ Suivi vigilance (Excel)", to_excel_bytes({"VIGILANCE": df.drop(columns=["_annotee"])}),
                                file_name="suivi_vigilance.xlsx")
+            ann = sorted({a for a in df["_annotee"].dropna() if Path(a).exists()})
+            if ann:
+                pick = st.selectbox("Fiches annotées (analyse des HIT)", ann, format_func=lambda a: Path(a).name,
+                                    key="vig_ann")
+                st.download_button("⬇ Fiche annotée", Path(pick).read_bytes(), file_name=Path(pick).name,
+                                   key="vig_ann_dl")
 
 
 def statut_map(P) -> dict[str, str]:
