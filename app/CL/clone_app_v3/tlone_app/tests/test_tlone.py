@@ -889,3 +889,47 @@ def test_registre_exige_vigilance():
         n = transfers.register(Path(d) / "reg.csv", sy, dec, "u", vigilance={"a": "RAS", "b": "HIT"})
         reg = transfers.load_registre(Path(d) / "reg.csv")
     assert n == 1 and list(reg["FICHIER"]) == ["a"] and list(reg["STATUT_VIGILANCE"]) == ["RAS"]
+
+
+def test_vigilance_analyse_hit_dans_tlone(tmp_path):
+    """HIT commenté dans l'app : non avéré -> TL libéré + fiche annotée ; avéré -> alerte confirmée."""
+    from openpyxl import load_workbook
+    from tlone import vigilance as v
+    tpl = tmp_path / "modele.xlsx"
+    _modele_vigilance(tpl)
+    ds = [dict(fichier="f1", ref_client="07310108547", client="KAYA AHMET", beneficiaire="KAYA AHMET", iban="TR1",
+               swift="TEBUTRIS", banque="TEB", pays_banque="TURQUIE", individus=["MEHMET KAYA", "AYSE KAYA"]),
+          dict(fichier="f2", ref_client="07310262001", client="DEMIR ALI", beneficiaire="DEMIR ALI", iban="TR2",
+               swift="ZIRATRIS", banque="ZIRAAT", pays_banque="TURQUIE", individus=[])]
+    units = v.build_units(ds)
+    v.prepare(units, tpl, tmp_path / "lot", "TOSYALI")
+    jp = tmp_path / "j.jsonl"
+    v.append(jp, "u", "ENVOI", lot="L1", unites=units)
+    u1 = next(u for u in units if u["fichiers"] == ["f1"])
+    u2 = next(u for u in units if u["fichiers"] == ["f2"])
+    r1 = _retour(tmp_path / "lot" / u1["fichier"], {"D32": "OK ==> RAS\nOK ==> HIT"})
+    r2 = _retour(tmp_path / "lot" / u2["fichier"], {"D12": "OK ==> HIT"})
+    v.import_returns([(u1["fichier"], r1), (u2["fichier"], r2)], v.read_journal(jp), jp, "u", tmp_path / "res")
+    j = v.read_journal(jp)
+    ret1 = next(e for e in j if e["action"] == "RETOUR" and e["uid"] == u1["uid"])
+    assert Path(ret1["chemin"]).exists() and ret1["points"][0][2] == "AYSE KAYA"   # HIT sur la mère (rang 2)
+    pt = ret1["points"][0]
+    with pytest.raises(ValueError):                                                  # commentaire obligatoire
+        v.analyse_points(jp, "u", u1["uid"], ["f1"], [{"rubrique": pt[0], "rang": pt[1], "valeur": pt[2],
+                                                       "verdict": "NON_AVERE", "commentaire": ""}], None, tmp_path)
+    ev = v.analyse_points(jp, "u", u1["uid"], ["f1"],
+                          [{"rubrique": pt[0], "rang": pt[1], "valeur": pt[2], "verdict": "NON_AVERE",
+                            "commentaire": "Homonyme : date de naissance différente"}],
+                          Path(ret1["chemin"]), tmp_path / "analyses")
+    assert ev["decision"] == "LEVEE"
+    ws = load_workbook(ev["fiche_annotee"]).worksheets[0]
+    assert "NON AVÉRÉ — AYSE KAYA : Homonyme" in ws["E32"].value
+    ret2 = next(e for e in v.read_journal(jp) if e["action"] == "RETOUR" and e["uid"] == u2["uid"])
+    p2 = ret2["points"][0]
+    ev2 = v.analyse_points(jp, "u", u2["uid"], ["f2"], [{"rubrique": p2[0], "rang": 1, "valeur": p2[2],
+                                                         "verdict": "AVERE", "commentaire": "Banque sous sanctions"}],
+                           Path(ret2["chemin"]), tmp_path / "analyses")
+    assert ev2["decision"] == "CONFIRMEE"
+    st = v.statuses(v.read_journal(jp))
+    assert st["f1"]["statut"] == "HIT_LEVE" and st["f2"]["statut"] == "HIT_CONFIRME"
+    assert v.eligible(st) == {"f1"}
