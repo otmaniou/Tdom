@@ -1,6 +1,7 @@
 """Worker GPU TL-One, à lancer à la main dans un workspace GPU (environnement tlone) :
 
-    /opt/conda/envs/tlone-tf4/bin/python /mnt/code/tlone_app_v2/run_worker.py --prewarm
+    /opt/conda/envs/tlone-tf4/bin/python /mnt/code/tlone_app_v4/run_worker.py --prewarm --data-root \
+         /domino/datasets/local/TL_one_domino/document_pipeline/employeurs/TOSYALI
 
 L'App doit être en TLONE_RUN_MODE=worker. Ctrl+C pour arrêter. Voir tlone/worker.py.
 """

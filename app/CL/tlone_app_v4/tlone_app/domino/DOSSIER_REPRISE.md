@@ -31,8 +31,10 @@ Notebooks validés (jamais modifiés sur disque ; l'app les exécute avec des pa
   `/mnt/data` est le volume local du workspace : ne PAS y mettre les données (non partagé avec l'App).
 - Variables : `TLONE_RUN_MODE=worker`, `TLONE_GPU_TIER=shared-gpu-12x48-H100-1x80`, `TLONE_DATA_ROOT` ci-dessus.
 - **Mode worker** (démos) : App sur tier CPU ; dans un workspace H100 :
-  `/opt/conda/envs/tlone-tf4/bin/python /mnt/code/tlone_app_v4/run_worker.py --steps dom_extract,ov_extract --prewarm`.
-  Modèles chargés une fois (≈ 55 Go + 17 Go). Signal de vie `runs/worker_heartbeat.json` (âge par epoch, indépendant du fuseau).
+  `/opt/conda/envs/tlone-tf4/bin/python /mnt/code/tlone_app_v4/run_worker.py --steps dom_extract,ov_extract --prewarm --data-root <dossier employeur>`.
+  Modèles chargés une fois (≈ 55 Go + 17 Go). Signal de vie `document_pipeline/_commun/worker/worker_heartbeat.json`, écrit toutes
+  les 15 s par un fil de fond (aussi pendant le chargement et les longs lots), écriture atomique ; un worker d'une version
+  précédente (signal dans `runs/`) est détecté et signalé.
   Les prérequis de l'App contrôlent l'environnement **du worker** (versions remontées dans le heartbeat).
 - **Environnement `tlone`** : révision 6 active, mais **tlone-tf4 contient transformers 5.20.1** (non fixé dans le Dockerfile) → v26/v27 en échec.
   Contournement par workspace : `pip install "transformers==4.57.0"` (perdu au redémarrage).
@@ -41,7 +43,7 @@ Notebooks validés (jamais modifiés sur disque ; l'app les exécute avec des pa
   `python3 verifier_copie.py --reparer` (empreintes normalisées `MANIFEST_NORM.txt`, attendu 60/60).
 - Copie vers le Mac : `SendUserFile` puis `device_commit_files` (fileUuid, force) ; contrôle `md5sum -c MANIFEST.md5` dans
   `$HOME/mnt/projet_tl_one/tlone_app` (VM du Mac) et `python3 verifier_copie.py`.
-- Tests : 91 passent (`python3 -m pytest -q tests`).
+- Tests : 94 passent (`python3 -m pytest -q tests`).
 
 **Contraintes permanentes**
 - Jamais de Dockerfile dans le projet ni en photo (jeton Artifactory).
@@ -260,6 +262,25 @@ Dossier Domino : `/mnt/code/tlone_app_v4` (copie de v3 + fichiers modifiés). Ve
 - **Partie 1 DOM v16** (4 champs « à extraire ») : non livrée volontairement — la Partie 2 vérifie un schéma figé
   (99 champs + empreinte) ; à faire après la démo avec un test GPU sur corpus.
 
+### Revue complète du 22/10/2026 (V4 corrigée)
+- **Sélecteur d'employeur** : changer de page ramenait au 1er employeur (TOSYALI) — Streamlit recrée le widget à
+  chaque page. La référence est désormais `session_state["employeur"]` (clé du widget = page + employeur, choix via
+  rappel) ; l'employeur est aussi gardé dans l'adresse (`?emp=CODE`) : F5 le conserve. Les boutons (Ouvrir, Créer,
+  Démo) passent par `ui.choisir_employeur` (plus d'erreur StreamlitWidgetAlreadyInstantiatedError).
+- **Worker en rouge alors que lancé** : (1) le signal de vie n'était écrit qu'entre deux étapes → rouge pendant le
+  chargement des modèles et les longs lots ; désormais fil de fond toutes les 15 s + écriture atomique ;
+  (2) worker lancé depuis une ancienne version (signal dans `runs/`) → détecté et signalé ; (3) worker lancé sans
+  TLONE_DATA_ROOT → `--data-root` (commande exacte affichée dans l'App), sinon détection automatique du dataset.
+  Orange = chargement, vert = prêt. Le worker affiche au démarrage version, données, signal de vie, file.
+- **Vigilance** : une fiche retournée hors modèle ne fait plus planter la page OV (lecture tolérante, libellés
+  absents signalés).
+- **Accueil** : reliquat de l'étape 2 = même définition que les pages Planning TL et Historique TL.
+- Vérifications : 94 tests (Python 3.13 / Streamlit 1.66 et Python 3.11 / Streamlit 1.40), contrôle croisé des
+  appels inter-modules (attributs et signatures : 0 écart), pyflakes, parcours navigateur réel de toutes les
+  pages et de tous les onglets (DEMO et TOSYALI : 0 exception), boutons démo / planning / reconduction HIT /
+  registre / génération BOCI / régularisation, worker réel lancé et vu par l'App, notebooks patchés (v26–v29,
+  Parties 1 et 2) : cellules de configuration et de traitement repérées.
+
 ### F. Fichiers entrants (plus tard, formats à convenir sur spécimens)
 TL exécutés, TL en cours, opérations exécutées (Atlas via SWIFT), blocages disponibles, soldes disponibles et provisoires.
 
@@ -304,5 +325,5 @@ Chaque lot : tests automatiques, `MANIFEST.md5` + `MANIFEST_NORM.txt` régénér
 ## 7. Reprise dans une nouvelle session
 
 1. Lire ce document (projet claude.ai « projet_tl_one » ou `domino/DOSSIER_REPRISE.md`).
-2. Récupérer l'app depuis le Mac (dossier `tlone_app`), lancer `python3 -m pytest -q tests` (91 attendus) et `python3 verifier_copie.py`.
+2. Récupérer l'app depuis le Mac (dossier `tlone_app`), lancer `python3 -m pytest -q tests` (94 attendus) et `python3 verifier_copie.py`.
 3. Annoncer le lot attaqué et ses questions ouvertes avant de coder.

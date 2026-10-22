@@ -9,7 +9,7 @@ le dataset monté sous `/mnt/data/document_pipeline`. On enregistre avec
 ```
 /mnt/code/
 ├── app.sh                 ← lanceur de l'App Domino (copie de domino/app.sh.racine)
-└── tlone_app_v1/          ← une version de l'app = un dossier (v2, v3… pour les essais)
+└── tlone_app_v4/          ← une version de l'app = un dossier (v1, v2, v3… versions précédentes)
     ├── Accueil.py  app.sh  run_step.py  requirements.txt  MANIFEST.md5
     ├── pages/  tlone/  tests/  notebooks/  domino/
 
@@ -21,7 +21,7 @@ le dataset monté sous `/mnt/data/document_pipeline`. On enregistre avec
     └── document_pipeline/V15_A/ {01_extraction_raw, 02_postprocessing, 02b_validation_app,
                                   03_planning_tl, 04_transferts}  + runs/
 ```
-Changer de version : modifier la ligne de `/mnt/code/app.sh` (`tlone_app_v1` → `v2`), Stop/Start de l'App.
+Changer de version : modifier la ligne de `/mnt/code/app.sh` (ex. `tlone_app_v3` → `tlone_app_v4`), Stop/Start de l'App, puis relancer le worker depuis le nouveau dossier.
 
 ## 2. Environnement `tlone` (Govern › Environments)
 
@@ -47,9 +47,9 @@ Partie 2 et v26 → `tlone-tf4` (`TLONE_<ETAPE>_PYTHON` pour forcer un autre int
 ## 4. Vérifier dans un workspace (environnement `tlone`, tier GPU)
 
 ```bash
-cd /mnt/code/tlone_app_v2
+cd /mnt/code/tlone_app_v4
 python3 verifier_copie.py --reparer   # copie par copier-coller : fins de ligne remises en LF, puis
-                                      # « 37/37 fichiers identiques » attendu (sinon recopier les DIFFERENT)
+                                      # « 60/60 fichiers identiques » attendu (sinon recopier les DIFFERENT)
 /opt/conda/envs/tlone-tf4/bin/python -m pytest -q tests     # tous les tests « passed »
 /opt/conda/envs/tlone-tf4/bin/python domino/check_env.py    # environnements, GPU, modèles, prérequis
 ```
@@ -84,12 +84,20 @@ que le traitement des PDF. Les notebooks ne sont pas modifiés.
 1. Variable du projet : `TLONE_RUN_MODE=worker` ; App publiée sur un **tier CPU** (Stop/Start).
 2. Workspace sur le tier **H100**, environnement `tlone`, puis dans un terminal :
    ```bash
-   /opt/conda/envs/tlone-tf4/bin/python /mnt/code/tlone_app_v2/run_worker.py --steps dom_extract --prewarm
+   /opt/conda/envs/tlone-tf4/bin/python /mnt/code/tlone_app_v4/run_worker.py --steps dom_extract,ov_extract --prewarm \
+       --data-root /domino/datasets/local/TL_one_domino/document_pipeline/employeurs/TOSYALI
    ```
+   - Toujours lancer le worker depuis **le même dossier de version que l'App** (tlone_app_v4) et avec
+     `--data-root` : il écrit alors son signal de vie dans `document_pipeline/_commun/worker/`, là où l'App
+     le cherche (un seul worker pour tous les employeurs). Les 4 premières lignes affichées par le worker
+     donnent la version, le dossier des données, le signal de vie et la file des demandes : le chemin du
+     signal de vie doit être celui affiché par l'App en rouge.
+   - La commande exacte est aussi affichée dans l'App (barre latérale › « Commande de lancement du worker »).
    - `--steps dom_extract` : Partie 1 seulement (Qwen3.8-27B ≈ 55 Go de mémoire GPU) ;
      `--steps dom_extract,ov_extract` charge aussi Qwen2.5-VL-7B (≈ 70 Go au total : à essayer avant la démo).
    - `--prewarm` : charge les modèles tout de suite (sinon à la première demande).
-   - Attendre « prêt (modèle chargé) » : l'App affiche alors « Worker GPU actif » dans la barre latérale.
+   - Pendant le chargement (plusieurs minutes) l'App affiche « Moteur IA en cours de chargement » (orange) ;
+     puis « Moteur IA prêt » (vert). Le signal de vie est écrit toutes les 15 s, même pendant un long lot.
 3. Dans l'App : déposer les PDF, « Lancer » → le worker traite, l'App suit le statut (Rafraîchir).
    La Partie 2 (CPU) est exécutée par le worker également.
 4. Fin de démo : **Ctrl+C** dans le terminal (libère le GPU), puis arrêter le workspace.

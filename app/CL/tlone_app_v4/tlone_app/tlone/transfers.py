@@ -659,7 +659,6 @@ def _controles_rh(ck, d, rh, client, mois, part, montant, devise, nom, tol) -> d
            + (" — bénéficiaire ≠ salarié" if r.get("BENEFICIAIRE") and (name_similarity(r.get("BENEFICIAIRE"), r.get("NOM_PRENOM")) or 0) < 0.8 else ""))
     fin = r.get("PERMIS_FIN")
     if fin and mois:
-        from calendar import monthrange
         y, m = map(int, mois.split("-"))
         deb = date(y, m, 16 if part == "P2" else 1)
         ck.add("R07", "Permis de travail (RH) valide sur la période", "Base RH employeur", "REVIEW",

@@ -10,9 +10,7 @@ Contrôles : NIF de la demande = NIF de l'employeur, somme des articles = total 
 from __future__ import annotations
 
 import re
-from datetime import date
 from html.parser import HTMLParser
-from pathlib import Path
 
 import pandas as pd
 

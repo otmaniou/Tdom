@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from .common import digits, is_blank, name_similarity, parse_amount, parse_date
+from .common import digits, is_blank, parse_amount, parse_date
 from .periode import lire
 from .rh import iban_clean, iban_ok, swift11, swift_ok
 

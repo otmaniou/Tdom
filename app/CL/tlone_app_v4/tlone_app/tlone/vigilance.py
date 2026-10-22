@@ -115,28 +115,40 @@ def same_person(a, b) -> bool:
 
 
 # ------------------------------------------------------------------ modèle : cellules repérées par libellé
-def locate(ws) -> dict:
-    """{clé: numéro de ligne} + 'first'/'last' : lignes du tableau des rubriques."""
+def _cle(v) -> str:
+    """Libellé comparé sans accents, casse, ponctuation ni espaces : « Réf. Dossier : » = « REF DOSSIER »."""
+    return re.sub(r"[^A-Z0-9]", "", norm(v))
+
+
+def locate(ws, strict: bool = True) -> dict:
+    """{clé: numéro de ligne} + 'first'/'last' : lignes du tableau des rubriques.
+    Libellés cherchés en colonnes A à C, sans tenir compte de la ponctuation ni des espaces.
+    strict=False (fiches retournées) : seule la ligne d'en-tête « Contrôle » est exigée ; les libellés d'en-tête
+    absents (client, réf. dossier…) sont laissés vides au lieu de bloquer la lecture."""
     rows = {}
-    want = {norm(lab): k for k, lab in LABELS.items()}
+    want = {_cle(lab): k for k, lab in LABELS.items()}
     header = None
     for r in range(1, ws.max_row + 1):
-        a = norm(ws.cell(r, 1).value)
-        if not a:
-            continue
-        if a in want and want[a] not in rows:
-            rows[want[a]] = r
-        if a == norm(HEADER_LABEL) and header is None:
-            header = r
+        for c in (1, 2, 3):
+            a = _cle(ws.cell(r, c).value)
+            if not a:
+                continue
+            if a in want and want[a] not in rows:
+                rows[want[a]] = r
+                break
+            if c == 1 and a == _cle(HEADER_LABEL) and header is None:
+                header = r
+                break
     missing = [LABELS[k] for k in LABELS if k not in rows]
-    if missing or header is None:
+    if (missing and strict) or header is None:
         raise ValueError("Modèle de vigilance non reconnu : libellés absents en colonne A : "
-                         + ", ".join(missing + ([] if header else [HEADER_LABEL])))
+                         + ", ".join((missing if strict else []) + ([] if header else [HEADER_LABEL])))
     last = header
     for r in range(header + 1, ws.max_row + 1):
         if text(ws.cell(r, 2).value):          # colonne Type (C / E / I / V) renseignée = rubrique
             last = r
     rows["first"], rows["last"], rows["header"] = header + 1, last, header
+    rows["manquants"] = missing
     return rows
 
 
@@ -344,8 +356,17 @@ def iter_return_files(uploads: list[tuple[str, bytes]]):
 
 def read_return(data: bytes) -> dict:
     from openpyxl import load_workbook
-    ws = load_workbook(io.BytesIO(data), data_only=True).worksheets[0]
-    r = locate(ws)
+    wb = load_workbook(io.BytesIO(data), data_only=True)
+    ws, r, err = None, None, None
+    for w in wb.worksheets:                       # la fiche peut ne pas être la première feuille
+        try:
+            ws, r = w, locate(w, strict=False)
+            break
+        except ValueError as exc:
+            err = err or exc
+    if r is None:
+        raise err or ValueError("Classeur vide")
+    cell = lambda k: text(ws.cell(r[k], 3).value) if k in r else ""  # noqa: E731
     rubriques = []
     for row in range(r["first"], r["last"] + 1):
         lab = text(ws.cell(row, 1).value)
@@ -353,10 +374,9 @@ def read_return(data: bytes) -> dict:
             continue
         rubriques.append({"ligne": row, "rubrique": lab, "valeur": text(ws.cell(row, 3).value),
                           "resultat": text(ws.cell(row, 4).value), "commentaire": text(ws.cell(row, 5).value)})
-    return {"client": text(ws.cell(r["client"], 3).value), "ref": text(ws.cell(r["ref"], 3).value),
-            "beneficiaire": text(ws.cell(r["beneficiaire"], 3).value), "banque": text(ws.cell(r["banque"], 3).value),
-            "individus": lines(ws.cell(r["individus"], 3).value), "rubriques": rubriques,
-            "individus_row": r["individus"]}
+    return {"client": cell("client"), "ref": cell("ref"), "beneficiaire": cell("beneficiaire"), "banque": cell("banque"),
+            "individus": lines(cell("individus")), "rubriques": rubriques, "individus_row": r.get("individus"),
+            "libelles_absents": r["manquants"]}
 
 
 def match_unit(name: str, ret: dict, units: dict[str, dict]) -> tuple[dict | None, str]:
@@ -376,7 +396,9 @@ def match_unit(name: str, ret: dict, units: dict[str, dict]) -> tuple[dict | Non
 def analyse(u: dict, ret: dict) -> tuple[str, list[list], list[str]]:
     """Statut de l'unité + détail par rubrique / individu + contrôles de structure."""
     detail, ctl = [], []
-    if norm(ret["client"]) != norm(u["client"]):
+    if ret.get("libelles_absents"):
+        ctl.append("Fiche retournée hors modèle, libellés absents : " + ", ".join(ret["libelles_absents"]))
+    if ret["client"] and norm(ret["client"]) != norm(u["client"]):
         ctl.append(f"Client différent : « {ret['client']} » (envoyé « {u['client']} »)")
     for rb in ret["rubriques"]:
         names = lines(rb["valeur"]) if rb["ligne"] == ret["individus_row"] else [rb["valeur"]]

@@ -6,7 +6,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import streamlit as st  # noqa: E402
 
 from tlone import planning, transfers, ui, ui_ov, ui_vigilance  # noqa: E402
-from tlone.common import audit, backup, current_user, to_excel_bytes  # noqa: E402
+from tlone.common import audit, current_user, to_excel_bytes  # noqa: E402
 
 s = ui.setup("Transferts OV")
 P = s.paths

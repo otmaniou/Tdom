@@ -469,12 +469,10 @@ def _atlas_row(w, ref, mt, objet, d_val) -> dict:
 
 def _ov(P: Paths, W: list[dict], M: date, today: date) -> None:
     """Lot d'OV du mois M « lus par l'IA » (classeur au format du notebook) + PDF spécimens."""
-    from openpyxl import Workbook
     from .transfers import V26_SCHEMA
     extra = {"OV": [("devise_transfert", "Devise de transfert"), ("reference_paiement", "Reference paiement (case 70)"),
                     ("beneficiaire_adresse", "Bénéficiaire adresse")]}
     schema = {g: list(cs) + [x for x in extra.get(g, []) if x[0] not in {k for k, _ in cs}] for g, cs in V26_SCHEMA.items()}
-    labels = {g: dict(cs) for g, cs in schema.items()}
     rows = []
     for w in W:
         parts = [(None, 30)] if not w["renouv"] else [("P1", 17), ("P2", 13)]

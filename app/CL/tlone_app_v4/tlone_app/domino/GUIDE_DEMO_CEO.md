@@ -11,7 +11,10 @@ TL-One contrôle et prépare, et chaque acteur ne tranche que les écarts — po
    Jeu entièrement fictif : 12 salariés, 13 DOM, base RH / ATF / autorisations du mois (page du portail),
    14 OV lus, une extraction OV d'un mois passé, historique CarthagoTrade / Atlas, blocages et soldes.
 4. Garder sous la main les 3 fichiers BOCI préparés à la main (spécimens) pour l'étape 7.
-5. Option « IA en direct » : lancer le worker GPU et préparer 1 ou 2 PDF d'OV spécimens (TOSYALI).
+5. Option « IA en direct » : dans un workspace GPU, lancer le worker **depuis tlone_app_v4** :
+   `/opt/conda/envs/tlone-tf4/bin/python /mnt/code/tlone_app_v4/run_worker.py --steps dom_extract,ov_extract --prewarm --data-root /domino/datasets/local/TL_one_domino/document_pipeline/employeurs/TOSYALI`
+   (commande aussi affichée dans l'App, barre latérale). Orange = chargement des modèles (quelques minutes),
+   vert = prêt. Préparer 1 ou 2 PDF d'OV spécimens (TOSYALI).
 
 ## Déroulé
 | # | Écran | Ce que l'on montre | Phrase clé |

@@ -2,10 +2,10 @@
 
 Lancé à la main dans un workspace GPU (environnement tlone) :
 
-    /opt/conda/envs/tlone-tf4/bin/python /mnt/code/tlone_app_v2/run_worker.py
+    /opt/conda/envs/tlone-tf4/bin/python /mnt/code/tlone_app_v4/run_worker.py --prewarm --data-root <dossier de l'employeur>
 
-L'App (TLONE_RUN_MODE=worker) dépose une demande dans runs/queue/ ; le worker la traite et
-écrit runs/<run_id>.status.json comme un job : l'App affiche le résultat de la même façon.
+L'App (TLONE_RUN_MODE=worker) dépose une demande dans <home>/_commun/worker/queue/ ; le worker la traite et
+écrit runs/<run_id>.status.json (dans le dossier de l'employeur) comme un job : l'App affiche le résultat de la même façon.
 
 Le modèle n'est chargé qu'UNE fois : chaque notebook GPU tourne dans un noyau Jupyter qui reste
 ouvert (un par interpréteur : tlone-tf5 pour la Partie 1, tlone-tf4 pour la v26). À chaque demande,
@@ -20,6 +20,7 @@ import os
 import socket
 import subprocess
 import sys
+import threading
 import time
 import traceback
 from datetime import datetime
@@ -38,6 +39,8 @@ PROCESS_MARKERS = {
     "ov_extract": ("for pdf_path in pdfs", "pdf_path in enumerate(pdfs", "pd.read_excel(EXCEL_PATH"),
 }
 HEARTBEAT_MAX_AGE_S = 90
+BEAT_EVERY_S = 15          # battement en tâche de fond : le worker reste « vivant » pendant un chargement ou un long lot
+WORKER_PYTHON = "/opt/conda/envs/tlone-tf4/bin/python"
 
 
 def queue_dir(s: Settings) -> Path:
@@ -50,10 +53,19 @@ def heartbeat_path(s: Settings) -> Path:
     return s.common_dir / "worker" / "worker_heartbeat.json"
 
 
-def worker_signal(s: Settings) -> dict | None:
-    """Dernier battement du worker, même ancien (None si jamais démarré ici) ; age_s en secondes.
-    L'âge vient de l'horloge epoch (indépendante du fuseau horaire de l'App et du workspace)."""
-    p = heartbeat_path(s)
+def legacy_heartbeat_path(s: Settings) -> Path:
+    """Emplacement du signal de vie des versions précédentes (worker lancé depuis tlone_app_v1…v3)."""
+    return s.paths.runs_dir / "worker_heartbeat.json"
+
+
+def commande_worker(s: Settings) -> str:
+    """Commande exacte à lancer dans le workspace GPU (dossier de l'App + racine des données explicites)."""
+    py = WORKER_PYTHON if Path(WORKER_PYTHON).exists() or os.environ.get("DOMINO_PROJECT_ID") else "python"
+    return (f"{py} {APP_DIR / 'run_worker.py'} --steps dom_extract,ov_extract --prewarm "
+            f"--data-root {s.paths.data_root}")
+
+
+def _read_beat(p: Path) -> dict | None:
     if not p.exists():
         return None
     try:
@@ -64,8 +76,20 @@ def worker_signal(s: Settings) -> dict | None:
             age = (datetime.now() - datetime.fromisoformat(d["ts"])).total_seconds()
         d["age_s"] = round(age)
         return d
-    except Exception:
+    except Exception:  # noqa: BLE001  fichier en cours d'écriture ou illisible
         return None
+
+
+def worker_signal(s: Settings) -> dict | None:
+    """Dernier battement du worker, même ancien (None si jamais démarré ici) ; age_s en secondes.
+    L'âge vient de l'horloge epoch (indépendante du fuseau horaire de l'App et du workspace)."""
+    p = heartbeat_path(s)
+    for _ in range(3):           # lecture concurrente d'une écriture : on réessaie
+        d = _read_beat(p)
+        if d is not None or not p.exists():
+            return d
+        time.sleep(0.2)
+    return None
 
 
 def worker_state(s: Settings) -> dict | None:
@@ -75,13 +99,20 @@ def worker_state(s: Settings) -> dict | None:
 
 
 def worker_absent_text(s: Settings) -> str:
-    """Pourquoi le worker est vu comme arrêté (pour l'App)."""
+    """Pourquoi le worker est vu comme arrêté (pour l'App), avec la cause probable."""
     d = worker_signal(s)
+    old = _read_beat(legacy_heartbeat_path(s))
+    if not d and old and abs(old["age_s"]) <= HEARTBEAT_MAX_AGE_S:
+        return (f"un worker d'une version précédente tourne (lancé depuis {old.get('app_dir', '?')} sur "
+                f"{old.get('host')}) : il ne lit pas la file de cette version. Ctrl+C dans son terminal puis relancer "
+                f"depuis {APP_DIR}")
     if not d:
-        return f"non démarré (aucun signal dans {heartbeat_path(s).parent})"
+        return (f"non démarré (aucun signal dans {heartbeat_path(s).parent}). Lancé quand même ? Vérifier que le "
+                f"worker affiche « signal de vie : {heartbeat_path(s)} » ; sinon le relancer avec --data-root")
     if d.get("state") == "ARRET":
         return f"arrêté sur {d.get('host')}"
-    return f"dernier signal il y a {d['age_s']} s ({d.get('host')}, {d.get('ts')})"
+    return (f"dernier signal il y a {d['age_s']} s ({d.get('host')}, {d.get('ts')}) : worker arrêté ou "
+            "workspace GPU fermé")
 
 
 def enqueue(s: Settings, rec: dict) -> Path:
@@ -199,6 +230,9 @@ class Worker:
         self.done = 0
         self.env: dict = {}
         self.errors: dict = {}
+        self.state = "ATTENTE"
+        self._stop = threading.Event()
+        self._beater: threading.Thread | None = None
 
     def probe_env(self) -> dict:
         """Versions des bibliothèques vues PAR LE WORKER (là où tournent les notebooks) : l'App s'en sert
@@ -212,14 +246,36 @@ class Worker:
         self.env = out
         return out
 
-    def beat(self, state: str = "ATTENTE") -> None:
+    def beat(self, state: str | None = None) -> None:
+        """Écrit le signal de vie (écriture atomique : l'App ne lit jamais un fichier à moitié écrit)."""
+        from .config import APP_VERSION
+        if state:
+            self.state = state
         p = heartbeat_path(self.s)
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(json.dumps({
-            "ts": datetime.now().astimezone().isoformat(timespec="seconds"), "epoch": time.time(), "host": socket.gethostname(), "pid": os.getpid(),
-            "state": state, "current": self.current, "done": self.done, "steps": list(self.steps) + ["dom_post"],
-            "warm": {k: {"loaded_at": w.loaded_at, "load_seconds": w.load_seconds} for k, w in self.warm.items()},
-            "app_dir": str(APP_DIR), "env": self.env, "errors": self.errors}, ensure_ascii=False), encoding="utf-8")
+        data = json.dumps({
+            "ts": datetime.now().astimezone().isoformat(timespec="seconds"), "epoch": time.time(),
+            "host": socket.gethostname(), "pid": os.getpid(), "state": self.state, "current": self.current,
+            "done": self.done, "steps": list(self.steps) + ["dom_post"],
+            "warm": {k: {"loaded_at": w.loaded_at, "load_seconds": w.load_seconds} for k, w in list(self.warm.items())},
+            "app_dir": str(APP_DIR), "version": APP_VERSION, "data_root": str(self.s.paths.data_root),
+            "env": self.env, "errors": dict(self.errors)}, ensure_ascii=False, default=str)
+        tmp = p.with_name(f".{p.name}.{os.getpid()}.tmp")
+        tmp.write_text(data, encoding="utf-8")
+        os.replace(tmp, p)
+
+    def start_beating(self) -> None:
+        """Battement toutes les BEAT_EVERY_S secondes en tâche de fond, même pendant le chargement des modèles
+        (plusieurs minutes) ou le traitement d'un long lot : l'App ne voit plus le worker « arrêté » à tort."""
+        def run():
+            while not self._stop.wait(BEAT_EVERY_S):
+                try:
+                    self.beat()
+                except Exception as exc:  # noqa: BLE001
+                    print(f"[worker] signal de vie non écrit : {exc}", flush=True)
+        self.beat()
+        self._beater = threading.Thread(target=run, name="tlone-heartbeat", daemon=True)
+        self._beater.start()
 
     def _status(self, run_id: str, **kw) -> None:
         nbrunner._write_status(self.s.paths.runs_dir / f"{run_id}.status.json", run_id=run_id, **kw)
@@ -287,6 +343,7 @@ class Worker:
             self._status(run_id, finished_at=datetime.now().isoformat(timespec="seconds"))
             self.current = None
             self.done += 1
+            self.state = "ATTENTE"
 
     def next_request(self) -> tuple[Path, dict] | None:
         q = queue_dir(self.s)
@@ -303,28 +360,35 @@ class Worker:
         return None
 
     def loop(self, once: bool = False) -> None:
-        print(f"[worker] TL-One — données {self.s.paths.data_root} — étapes {self.steps} — Ctrl+C pour arrêter",
-              flush=True)
+        from .config import APP_VERSION
+        print(f"[worker] TL-One {APP_VERSION} — code {APP_DIR}\n"
+              f"[worker] données {self.s.paths.data_root} — étapes {self.steps} — Ctrl+C pour arrêter\n"
+              f"[worker] signal de vie : {heartbeat_path(self.s)}\n"
+              f"[worker] file des demandes : {queue_dir(self.s)}", flush=True)
+        self.start_beating()
         self.probe_env()
         for st, e in self.env.items():
             v = e["versions"] or {}
             print(f"[worker] {st} : {e['python']} — transformers {v.get('transformers')}", flush=True)
-        if self.prewarm:
-            for st in self.steps:
-                w = WarmNotebook(self.s, st, self.pythons.get(st))
-                self.warm[st] = w
-                self.beat(f"CHARGEMENT {st}")
-                try:
-                    w.warm(lambda t: print(t, end="" if t.endswith("\n") else "\n", flush=True))
-                except Exception as exc:  # noqa: BLE001  une étape en échec n'arrête pas les autres
-                    print(traceback.format_exc(), flush=True)
-                    print(f"[worker] ÉCHEC du chargement de {st} : {str(exc).splitlines()[-1][:300]}\n"
-                          f"[worker] {st} reste indisponible ; les autres étapes continuent.", flush=True)
-                    self.warm.pop(st).shutdown()
-                    self.errors[st] = str(exc).splitlines()[-1][:300]
         try:
+            if self.prewarm:
+                for st in self.steps:
+                    self.beat(f"CHARGEMENT {st}")
+                    try:
+                        w = WarmNotebook(self.s, st, self.pythons.get(st))
+                        self.warm[st] = w
+                        w.warm(lambda t: print(t, end="" if t.endswith("\n") else "\n", flush=True))
+                    except Exception as exc:  # noqa: BLE001  une étape en échec n'arrête pas les autres
+                        print(traceback.format_exc(), flush=True)
+                        msg = (str(exc).splitlines() or [repr(exc)])[-1][:300]
+                        print(f"[worker] ÉCHEC du chargement de {st} : {msg}\n"
+                              f"[worker] {st} reste indisponible ; les autres étapes continuent.", flush=True)
+                        if st in self.warm:
+                            self.warm.pop(st).shutdown()
+                        self.errors[st] = msg
+            self.beat("ATTENTE")
+            print("[worker] prêt : en attente des demandes de l'App", flush=True)
             while True:
-                self.beat()
                 got = self.next_request()
                 if got:
                     path, req = got
@@ -342,10 +406,12 @@ class Worker:
             print("\n[worker] arrêt demandé", flush=True)
             once = False
         finally:
+            self._stop.set()  # fin du battement en tâche de fond
             if not once:  # arrêt réel : on libère le GPU et on signale l'arrêt à l'App
                 self.stop()
 
     def stop(self) -> None:
+        self._stop.set()
         for w in self.warm.values():
             w.shutdown()
         self.warm.clear()
@@ -365,9 +431,25 @@ def main(argv: list[str]) -> int:
     a = ap.parse_args(argv)
     if a.data_root:
         os.environ["TLONE_DATA_ROOT"] = a.data_root
+    elif not os.environ.get("TLONE_DATA_ROOT"):
+        found = _auto_data_root()
+        if found:
+            os.environ["TLONE_DATA_ROOT"] = str(found)
+            print(f"[worker] TLONE_DATA_ROOT absent : données trouvées dans {found}", flush=True)
+        else:
+            print("[worker] ATTENTION : TLONE_DATA_ROOT absent et aucun dossier …/employeurs/<CODE> trouvé : le "
+                  "signal de vie irait dans /mnt/data, invisible pour l'App. Relancer avec --data-root "
+                  "/domino/datasets/local/<projet>/document_pipeline/employeurs/<CODE>", flush=True)
     steps = [x.strip() for x in a.steps.split(",") if x.strip() in GPU_STEPS]
     Worker(load_settings(), steps, prewarm=a.prewarm).loop()
     return 0
+
+
+def _auto_data_root() -> Path | None:
+    """Domino : dataset du projet …/document_pipeline/employeurs/<CODE> (TOSYALI de préférence)."""
+    cands = sorted(Path("/domino/datasets/local").glob("*/document_pipeline/employeurs/*"))
+    cands = [c for c in cands if c.is_dir()]
+    return next((c for c in cands if c.name == "TOSYALI"), cands[0] if cands else None)
 
 
 if __name__ == "__main__":

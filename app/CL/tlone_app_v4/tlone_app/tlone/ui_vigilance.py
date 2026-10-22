@@ -192,8 +192,16 @@ def render(P, s, A: pd.DataFrame, SY: pd.DataFrame, PL: pd.DataFrame):
                 st.markdown(f"#### {'🔴 HIT' if stat == 'HIT' else '🟠 À vérifier'} — {r0.get('NOM')}")
                 st.caption(f"Bénéficiaire {r0.get('BENEFICIAIRE') or '—'} · {len(fs)} TL : {', '.join(fs)}")
                 chemin = Path(ev["chemin"]) if ev.get("chemin") else None
+                fiche = None
                 if chemin and chemin.exists():
-                    fiche = vg.read_return(chemin.read_bytes())
+                    try:
+                        fiche = vg.read_return(chemin.read_bytes())
+                    except Exception as exc:  # noqa: BLE001 — une fiche illisible ne doit pas bloquer la page
+                        st.warning(f"Fiche retournée « {chemin.name} » illisible : {exc}. Réimporter la fiche au "
+                                   "modèle de vigilance (onglet Retours) ; l'analyse reste possible ci-dessous.")
+                        st.download_button("⬇ Fiche retournée (telle quelle)", chemin.read_bytes(), file_name=chemin.name,
+                                           key=f"vig_dlx_{uid}")
+                if fiche is not None:
                     rows = [{"Rubrique": rb["rubrique"], "Valeur": rb["valeur"], "Résultat": rb["resultat"],
                              "Commentaire": rb["commentaire"]} for rb in fiche["rubriques"]
                             if rb["valeur"] or vg.classify(rb["resultat"])[0] != "INFO"]

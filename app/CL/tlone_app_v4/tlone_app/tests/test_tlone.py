@@ -1585,3 +1585,122 @@ def test_page_de_la_piece_et_r08_jours():
         _, rows = transfers.control_dossier(dict(base, **{"ANNEXE_II.nombre_jours": jours}), pd.DataFrame(), reg,
                                             pd.DataFrame(), pd.DataFrame(), s, rh=rhdf)
         assert {r["CODE"]: r for r in rows}["R08"]["RESULTAT"] == attendu
+
+
+def test_vigilance_fiche_retournee_hors_modele_lue_sans_bloquer(tmp_path):
+    """Fiche retournée sans les libellés d'en-tête (Client:, Réf Dossier:…) ou avec une ponctuation différente :
+    lue quand même (rubriques), libellés absents signalés ; le modèle d'envoi reste contrôlé strictement."""
+    import io
+    from openpyxl import load_workbook
+    from tlone import vigilance as v
+    tpl = tmp_path / "modele.xlsx"
+    _modele_vigilance(tpl)
+    wb = load_workbook(tpl)
+    ws = wb.worksheets[0]
+    for c in ("A5", "A6", "A7", "A8"):
+        ws[c] = None
+    ws["A13"] = "Pays de la banque du bénéficiaire :"        # ponctuation différente : reconnu
+    ws["A12"] = "Banque  du  BENEFICIAIRE"
+    ws["D16"] = "OK ==> HIT"
+    b = io.BytesIO()
+    wb.save(b)
+    ret = v.read_return(b.getvalue())
+    assert ret["client"] == "" and ret["ref"] == ""
+    assert set(ret["libelles_absents"]) == {"Client:", "Réf Dossier:", "Circuit:", "Type de dossier:"}
+    assert any(rb["resultat"] == "OK ==> HIT" for rb in ret["rubriques"])
+    with pytest.raises(ValueError):
+        v.locate(load_workbook(io.BytesIO(b.getvalue())).worksheets[0])          # strict : modèle d'envoi
+    with pytest.raises(ValueError):
+        v.read_return(_xlsx_vide())
+
+
+def _xlsx_vide() -> bytes:
+    import io
+    from openpyxl import Workbook
+    b = io.BytesIO()
+    Workbook().save(b)
+    return b.getvalue()
+
+
+def test_changement_d_employeur_depuis_une_page(tmp_path, monkeypatch):
+    """« Ouvrir cet employeur » / démo : le sélecteur de la barre latérale n'est pas modifié après son affichage
+    (StreamlitWidgetAlreadyInstantiatedError) ; il reprend le choix au prochain affichage."""
+    from streamlit.testing.v1 import AppTest
+    monkeypatch.setenv("TLONE_DATA_ROOT", str(tmp_path / "home" / "employeurs" / "TOSYALI"))
+    monkeypatch.setenv("TLONE_RUN_MODE", "local")
+    from tlone import employeurs
+    employeurs.ensure_registered(tmp_path / "home", "TOSYALI", "TOSYALI IRON STEEL INDUSTRY ALGERIE")
+    employeurs.create(tmp_path / "home", "AUTRE SPA", "000016012345678", "u")
+    root = Path(__file__).resolve().parent.parent
+    at = AppTest.from_file(str(root / "Accueil.py"), default_timeout=240)
+    at.run()
+    at.switch_page("pages/0_Employeurs.py")
+    at.run()
+    code = employeurs.load(tmp_path / "home").set_index("RAISON_SOCIALE").loc["AUTRE SPA", "CODE"]
+    at.selectbox(key="emp_open").set_value(code)
+    [x for x in at.button if x.label == "Ouvrir cet employeur"][0].click()
+    at.run()
+    assert not at.exception
+    choisi = at.session_state["employeur"]
+    assert choisi != "TOSYALI"
+    import streamlit as _stl
+    if tuple(int(x) for x in _stl.__version__.split(".")[:2]) < (1, 50):
+        return   # AppTest < 1.50 rejoue les widgets de la page précédente : parcours vérifié en navigateur réel
+    for pg in ("pages/2_Planning_TL.py", "pages/3_Transferts_OV.py", "Accueil.py"):   # reste choisi d'une page à l'autre
+        at.switch_page(pg)
+        at.run()
+        assert not at.exception and at.session_state["employeur"] == choisi
+        assert at.sidebar.selectbox[0].value == choisi
+    at.sidebar.selectbox[0].set_value("TOSYALI")                                   # choix dans la barre latérale
+    at.run()
+    assert at.session_state["employeur"] == "TOSYALI"
+    at.switch_page("pages/0_Employeurs.py")
+    at.run()
+    assert at.session_state["employeur"] == "TOSYALI" and at.sidebar.selectbox[0].value == "TOSYALI"
+
+
+def test_worker_reel_vu_par_l_app_et_battement_en_tache_de_fond(tmp_path, monkeypatch):
+    """run_worker.py lancé comme sur Domino (--data-root) : l'App le voit ; le battement continue pendant un long
+    traitement ; un worker d'une version précédente est diagnostiqué."""
+    import json as _json
+    import subprocess
+    import sys as _sys
+    import time as _time
+    from tlone import worker
+    root = tmp_path / "home" / "employeurs" / "TOSYALI"
+    root.mkdir(parents=True)
+    monkeypatch.setenv("TLONE_DATA_ROOT", str(root))
+    s = load_settings()
+    assert worker.worker_state(s) is None and "non démarré" in worker.worker_absent_text(s)
+    assert "--data-root " + str(root) in worker.commande_worker(s)
+    app = Path(__file__).resolve().parent.parent
+    env = {k: v for k, v in __import__("os").environ.items() if k != "TLONE_DATA_ROOT"}
+    proc = subprocess.Popen([_sys.executable, str(app / "run_worker.py"), "--steps", "ov_extract",
+                             "--data-root", str(root)], env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                            text=True)
+    try:
+        for _ in range(60):
+            if worker.worker_state(s):
+                break
+            _time.sleep(0.25)
+        w = worker.worker_state(s)
+        assert w and w["state"] == "ATTENTE" and w["data_root"] == str(root) and w["app_dir"] == str(app)
+    finally:
+        proc.terminate()
+        out = proc.communicate(timeout=20)[0]
+    assert "signal de vie : " + str(worker.heartbeat_path(s)) in out
+    # battement en tâche de fond pendant un traitement long (main thread occupé)
+    monkeypatch.setattr(worker, "BEAT_EVERY_S", 0.05)
+    wk = worker.Worker(s, ["ov_extract"])
+    wk.start_beating()
+    wk.state = "TRAITEMENT"
+    t0 = _json.loads(worker.heartbeat_path(s).read_text())["epoch"]
+    _time.sleep(0.3)
+    d = _json.loads(worker.heartbeat_path(s).read_text())
+    wk._stop.set()
+    assert d["epoch"] > t0 and d["state"] == "TRAITEMENT"
+    # ancien worker (v3) : signal dans runs/ de l'employeur, pas dans _commun/worker
+    worker.heartbeat_path(s).unlink()
+    s.paths.runs_dir.mkdir(parents=True, exist_ok=True)
+    worker.legacy_heartbeat_path(s).write_text(_json.dumps({"epoch": _time.time(), "host": "h", "app_dir": "/mnt/code/tlone_app_v3"}))
+    assert "version précédente" in worker.worker_absent_text(s) and "tlone_app_v3" in worker.worker_absent_text(s)

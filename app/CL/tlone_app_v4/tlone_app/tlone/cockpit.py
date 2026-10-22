@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from . import boci, employeurs, execution, historique, referentiels, rh, transfers
+from . import employeurs, execution, referentiels, rh, transfers
 
 
 def _nb_controles() -> int:
@@ -106,8 +106,11 @@ def indicateurs(P, s) -> dict:
         try:
             sp = execution.suivi_planning(PL, transfers.load_registre(P.registre_csv), data.get("trade"), at,
                                           tol=s.tolerance_montant_dzd)
-            K["reliquats"] = int((sp["STATUT_PERIODE"] == "NON_TRANSFERE").sum())
-            K["reliquat_montant"] = float(sp.loc[sp["STATUT_PERIODE"] == "NON_TRANSFERE", "RELIQUAT"].sum())
+            # même définition que les pages Planning TL et Historique TL : reliquat > 0 (non transféré, partiel,
+            # saisi non exécuté, « Exécuté » sans débit Atlas)
+            rel = sp["RELIQUAT"].fillna(0)
+            K["reliquats"] = int((rel > s.tolerance_montant_dzd).sum())
+            K["reliquat_montant"] = float(rel.sum())
         except Exception:  # noqa: BLE001
             pass
     K["envois_boci"] = len([d for d in P.boci_out.iterdir() if d.is_dir()]) if P.boci_out.exists() else 0
@@ -129,7 +132,7 @@ def etapes(K: dict) -> list[dict]:
         dict(n=1, t="DOM scannées → lecture IA", a="Data · IA (lecture des scans)", k=f"{K['dom_dossiers']} dossiers",
              s=f"{K['dom_restant']} dossier(s) avec écart à arbitrer · {K['dom_valides']} validé(s)", page="pages/1_Controles_DOM.py"),
         dict(n=2, t="Planning TL du contrat", a="Data", k=f"{K['doms']} DOM · {K['periodes']} périodes",
-             s=f"{K['reliquats']} période(s) échue(s) non transférée(s) — reliquat {_fmt(K['reliquat_montant'])} DZD",
+             s=f"{K['reliquats']} période(s) à régulariser — reliquat {_fmt(K['reliquat_montant'])} DZD",
              page="pages/2_Planning_TL.py"),
         dict(n=3, t="Base RH · ATF · autorisations", a="Employeur → Data", k=f"{K['salaries']} salariés",
              s=f"mois {K.get('rh_mois') or '—'} · {K['rh_dq']} anomalie(s) RH · {K['rh_planning_ecarts']} écart(s) Planning×RH",

@@ -1,6 +1,6 @@
 """Vérifie l'environnement TL-One sur Domino (à lancer en Job ou dans un workspace) :
 
-    /opt/conda/envs/tlone-tf4/bin/python /mnt/code/tlone_app_v1/domino/check_env.py
+    /opt/conda/envs/tlone-tf4/bin/python /mnt/code/tlone_app_v4/domino/check_env.py
 
 Contrôle les 2 environnements conda de l'image (tlone-tf4, tlone-tf5) : versions, classes de
 modèles attendues, GPU, accès aux modèles du ModelHub, puis le contrôle de démarrage de l'app

@@ -106,7 +106,7 @@ def check_general(s: Settings) -> list[dict]:
     if not env_root:
         rows.append(_row(KO, "TLONE_DATA_ROOT", "non défini → /mnt/data",
                          "Settings du projet > Environment variables : "
-                         "TLONE_DATA_ROOT=/mnt/data/document_pipeline/employeurs/TOSYALI"))
+                         "TLONE_DATA_ROOT=/domino/datasets/local/TL_one_domino/document_pipeline/employeurs/TOSYALI"))
     if not P.data_root.is_dir():
         rows.append(_row(KO, "Dossier de données", P.data_root, "Dossier absent : vérifier le dataset monté "
                                                                 "(étape Data de l'App / du job)"))
@@ -126,13 +126,12 @@ def check_general(s: Settings) -> list[dict]:
 
     rows.append(_row(OK, "Mode d'exécution", s.run_mode))
     if s.run_mode == "worker":
-        from .worker import worker_absent_text, worker_state
+        from .worker import commande_worker, worker_absent_text, worker_state
         w = worker_state(s)
         rows.append(_row(OK if w else KO, "Worker GPU",
                          f"actif sur {w['host']} — {w['state']} — modèles chargés : {', '.join(w['warm']) or 'aucun'}"
                          if w else worker_absent_text(s),
-                         "" if w else "Dans un workspace GPU : /opt/conda/envs/tlone-tf4/bin/python "
-                                      f"{APP_DIR}/run_worker.py --prewarm"))
+                         "" if w else f"Dans un workspace GPU : {commande_worker(s)}"))
     if s.run_mode == "domino":
         if not os.environ.get("DOMINO_PROJECT_ID"):
             rows.append(_row(KO, "DOMINO_PROJECT_ID", "absent", "Mode domino hors Domino : TLONE_RUN_MODE=local"))
@@ -201,14 +200,13 @@ def check_step(s: Settings, step: str) -> list[dict]:
     py = rt["python"]
     wenv, w = None, None
     if s.run_mode == "worker":  # les notebooks tournent dans le workspace du worker : on contrôle SON environnement
-        from .worker import worker_state
+        from .worker import commande_worker, worker_state
         w = worker_state(s)
         wenv = (w or {}).get("env") or None
     if w and w.get("app_dir") and str(w["app_dir"]) != str(APP_DIR):
         rows.append(_row(KO, "Dossier du worker", f"worker lancé depuis {w['app_dir']}",
                          f"L'App tourne depuis {APP_DIR} : le worker exécuterait une autre version (notebook, "
-                         f"contrôles). Ctrl+C puis : cd {APP_DIR} && /opt/conda/envs/tlone-tf4/bin/python "
-                         "run_worker.py --steps dom_extract,ov_extract --prewarm"))
+                         f"contrôles). Ctrl+C puis : {commande_worker(s)}"))
     if wenv is not None:
         e = wenv.get(step)
         err = ((w or {}).get("errors") or {}).get(step)
@@ -229,10 +227,10 @@ def check_step(s: Settings, step: str) -> list[dict]:
         rows += _lib_rows(step, py, probe_python(py, STEP_MODULES[step]), "")
 
     if s.run_mode == "worker":
-        from .worker import worker_absent_text, worker_state
+        from .worker import commande_worker, worker_absent_text, worker_state
         if not worker_state(s):
             rows.append(_row(KO, "Worker GPU", worker_absent_text(s),
-                             f"Lancer dans un workspace GPU : python {APP_DIR}/run_worker.py --prewarm"))
+                             f"Lancer dans un workspace GPU : {commande_worker(s)}"))
     if STEPS[step]["gpu"]:
         model = rt["model"] or MODEL_DEFAULT[step]
         here = Path(model).is_dir()

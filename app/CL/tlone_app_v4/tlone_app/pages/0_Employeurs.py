@@ -24,8 +24,7 @@ with a:
         pick = st.selectbox("Ouvrir l'espace de", list(v["CODE"]),
                             format_func=lambda c: v.set_index("CODE").loc[c, "RAISON_SOCIALE"], key="emp_open")
         if st.button("Ouvrir cet employeur", type="primary"):
-            st.session_state["employeur"] = pick
-            st.session_state["_emp_pick"] = pick
+            ui.choisir_employeur(pick)
             st.switch_page("Accueil.py")
 with b, st.container(border=True):
     st.markdown("**Nouvel employeur**")
@@ -42,8 +41,7 @@ with b, st.container(border=True):
             audit(s.paths.audit_log, "EMPLOYEUR_CREATION", current_user(), code=row["CODE"], raison_sociale=row["RAISON_SOCIALE"])
             msg = employeurs.nif_ok(nif)[1]
             st.success(f"Employeur {row['RAISON_SOCIALE']} créé (code {row['CODE']})." + (f" {msg}" if msg else ""))
-            st.session_state["employeur"] = row["CODE"]
-            st.session_state["_emp_pick"] = row["CODE"]
+            ui.choisir_employeur(row["CODE"])
             st.rerun()
         except ValueError as exc:
             st.error(str(exc))
@@ -79,7 +77,6 @@ with st.container(border=True):
         audit(s.paths.audit_log, "DEMO_CREATION", current_user(), dossier=str(root))
         st.cache_data.clear()
         st.cache_resource.clear()
-        st.session_state["employeur"] = demo.CODE
-        st.session_state["_emp_pick"] = demo.CODE
+        ui.choisir_employeur(demo.CODE)
         st.success("Employeur de démonstration prêt.")
         st.switch_page("Accueil.py")

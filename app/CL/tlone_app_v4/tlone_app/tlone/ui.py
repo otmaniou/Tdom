@@ -47,7 +47,7 @@ CSS = """
 """
 
 
-def _employer_picker():
+def _employer_picker(page: str = ""):
     """Choix de l'employeur courant (gardé pour toute la session, toutes les pages)."""
     from . import employeurs
     from .config import home_and_default
@@ -60,16 +60,49 @@ def _employer_picker():
     reg = employeurs.load(home)
     reg = reg[reg["ACTIF"].fillna("OUI") != "NON"]
     codes = list(reg["CODE"])
-    cur = st.session_state.get("employeur") or defaut or (codes[0] if codes else None)
+    cur = st.session_state.get("employeur") or _emp_url() or defaut or (codes[0] if codes else None)
     if cur not in codes and codes:
         cur = codes[0]
     if codes:
         lab = {r.CODE: r.RAISON_SOCIALE + ("  · démo" if r.DEMO == "OUI" else "") for r in reg.itertuples()}
-        if st.session_state.get("_emp_pick") not in codes:
-            st.session_state["_emp_pick"] = cur
-        cur = st.selectbox("Employeur", codes, format_func=lambda c: lab.get(c, c), key="_emp_pick")
+        nxt = st.session_state.pop("_emp_next", None)       # choix demandé par une page (bouton « Ouvrir »…)
+        if nxt in codes:
+            cur = nxt
+        # La valeur de référence est session_state["employeur"] (jamais la clé du widget) : Streamlit recrée le
+        # sélecteur à chaque changement de page et le remettrait sur le 1er employeur. La clé contient donc la page
+        # et l'employeur courant ; un choix de l'utilisateur passe par le rappel _emp_changed.
+        k = f"_emp_pick_{page}_{cur}"
+        st.selectbox("Employeur", codes, index=codes.index(cur), format_func=lambda c: lab.get(c, c), key=k,
+                     on_change=_emp_changed, args=(k,))
     st.session_state["employeur"] = cur
+    _emp_url(cur)
     return cur
+
+
+def _emp_url(code: str | None = None) -> str | None:
+    """Employeur gardé dans l'adresse (?emp=CODE) : un rechargement de la page (F5) garde l'employeur choisi."""
+    try:
+        if code is None:
+            v = st.query_params.get("emp")
+            return v[0] if isinstance(v, list) else v
+        if st.query_params.get("emp") != code:
+            st.query_params["emp"] = code
+    except Exception:  # noqa: BLE001  version de Streamlit sans st.query_params
+        return None
+    return code
+
+
+def _emp_changed(key: str) -> None:
+    """Rappel du sélecteur de la barre latérale (exécuté avant le script)."""
+    v = st.session_state.get(key)
+    if v:
+        st.session_state["employeur"] = v
+
+
+def choisir_employeur(code: str) -> None:
+    """Change l'employeur courant depuis une page (bouton) : pris en compte au prochain affichage."""
+    st.session_state["employeur"] = code
+    st.session_state["_emp_next"] = code
 
 
 def setup(title: str):
@@ -79,7 +112,7 @@ def setup(title: str):
         st.markdown(f"<div style='font-weight:800;font-size:1.25rem;color:{DARK}'>TL-One</div>"
                     "<div style='color:#5B6B64;font-size:.85rem;margin-bottom:8px'>Transfert libre des salaires · "
                     "BNP Paribas El Djazaïr</div>", unsafe_allow_html=True)
-        emp = _employer_picker()
+        emp = _employer_picker(title)
     s = load_settings(emp)
     s.paths.ensure()
     with st.sidebar:
@@ -87,13 +120,21 @@ def setup(title: str):
         with st.expander("Données", expanded=False):
             st.caption(f"`{s.paths.data_root}`")
         if s.run_mode == "worker":
-            from .worker import worker_absent_text, worker_state
+            from .config import APP_DIR
+            from .worker import commande_worker, worker_absent_text, worker_state
             w = worker_state(s)
-            if w:
-                st.success(f"Moteur IA prêt ({w['state'].lower()})"
-                           + (f" — {w['current']}" if w.get("current") else ""))
+            etat = str((w or {}).get("state") or "")
+            if w and w.get("app_dir") and str(w["app_dir"]) != str(APP_DIR):
+                st.warning(f"Moteur IA actif mais lancé depuis {w['app_dir']} (l'App tourne depuis {APP_DIR}) : "
+                           "le relancer depuis ce dossier.")
+            elif w and etat.startswith("CHARGEMENT"):
+                st.warning(f"Moteur IA en cours de chargement ({etat.split(' ', 1)[-1]}) — quelques minutes.")
+            elif w:
+                st.success(f"Moteur IA prêt ({etat.lower()})" + (f" — {w['current']}" if w.get("current") else ""))
             else:
                 st.error(f"Moteur IA (worker GPU) : {worker_absent_text(s)}.")
+                with st.expander("Commande de lancement du worker"):
+                    st.code(commande_worker(s), language="bash")
         gen = preflight.blocking(preflight.check_general(s))
         if gen:
             st.error(f"{len(gen)} prérequis bloquant(s) — voir l'Accueil")
@@ -180,9 +221,11 @@ def job_panel(s, step: str, help_text: str = ""):
             st.info(f"⏳ Traitement en cours : **{r['run_id']}**"
                     + (f" — statut Domino : **{ds}**" if ds else "")
                     + (f" — job {r['domino_job_id']}" if r.get("domino_job_id") else "")
-                    + ". Suivi détaillé : menu Jobs du projet ; cliquez « Rafraîchir » pour mettre à jour.")
+                    + (". Suivi détaillé : terminal du worker GPU (ou journal ci-dessous)" if s.run_mode == "worker"
+                       else ". Suivi détaillé : menu Jobs du projet")
+                    + " ; cliquez « Rafraîchir » pour mettre à jour.")
         if pend:
-            with st.expander("Le job a été arrêté ou a échoué dans Domino sans que l'app le voie ?"):
+            with st.expander("Le traitement a été arrêté (worker arrêté, job stoppé) sans que l'app le voie ?"):
                 pick = st.selectbox("Run à clore", [r["run_id"] for r in pend], key=f"ab_{step}")
                 st.caption("À n'utiliser que si le job n'apparaît plus comme en cours dans Domino.")
                 if st.button("Marquer abandonné", key=f"abb_{step}"):
