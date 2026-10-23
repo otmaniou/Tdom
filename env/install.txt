@@ -1,1 +1,25 @@
+pip install --no-cache-dir -r /mnt/code/tlone_app_v4/domino/env/requirements-tlone-tf4.txt
+python -c "import transformers, torch; print(transformers.__version__, torch.cuda.is_available())"
 
+
+
+pip install --no-cache-dir -r /mnt/code/tlone_app_v4/domino/env/requirements-tlone-tf4.txt
+python -c "import transformers, torch; print(transformers.__version__, torch.cuda.is_available())"
+
+
+cd /mnt/code/tlone_app_v4 && python -m pytest -q tests
+
+
+
+dws-venv-export tlone-tf4
+dws-venv-export tlone-tf5
+
+
+
+dws-dockerfile-init
+
+
+cp /mnt/code/tlone-tf4.yaml /mnt/code/tlone-tf5.yaml /mnt/dockerfile/desired-packages/
+
+
+dws-dockerfile-create
