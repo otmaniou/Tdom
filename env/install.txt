@@ -52,6 +52,12 @@ grep -i "transformers" /mnt/code/tlone-tf4.yaml
 grep -i "transformers" /mnt/code/tlone-tf5.yaml
 
 
+
+sed -i '1i name: tlone-tf4' /mnt/code/tlone-tf4.yaml
+sed -i '1i name: tlone-tf5' /mnt/code/tlone-tf5.yaml
+head -3 /mnt/code/tlone-tf4.yaml /mnt/code/tlone-tf5.yaml
+
+
 cp /mnt/code/tlone-tf4.yaml /mnt/code/tlone-tf5.yaml /mnt/dockerfile/desired-packages/
 dws-dockerfile-create
 
