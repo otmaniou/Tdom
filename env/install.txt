@@ -96,3 +96,44 @@ Collez le nouveau Dockerfile généré.
 Juste sous la ligne RUN conda env create -v -f /tmp/environment.yml, collez tout le contenu de bloc_tlone_tf5.txt. Il doit être à cet endroit, avant « IMAGE FOOTER » : c’est là que l’accès Artifactory est encore configuré, et le Dockerfile l’efface ensuite.
 Tout en bas, après RUN echo "" && echo "[DWS] job done…", collez lignes_fin_dockerfile.txt.
 Lancez Build. À la fin du journal, vous devez voir tf4 OK 4.57.… puis tf5 OK 5.20.1 ….
+
+
+
+
+
+
+
+
+
+
+1. Ouvrez le Dockerfile généré dans Notepad++ (ou dans l’éditeur du workspace) et faites ces remplacements avec Ctrl+H.
+
+a) La ligne de création de l’environnement :
+
+Rechercher	Remplacer par
+RUN conda env create -v -f /tmp/environment.yml	RUN conda env create -v -n tlone-tf4 -f /tmp/environment.yml
+
+b) Les chemins vides du noyau Jupyter : c’est la même cause, l’outil n’a pas récupéré le nom.
+
+Rechercher	Remplacer par
+envs//	envs/tlone-tf4/
+kernels//	kernels/tlone-tf4/
+
+Le noyau, lui, doit aussi recevoir son nom :
+
+Si une ligne mkdir -p …/jupyter/kernels/ se termine par kernels/ sans rien après : ajoutez tlone-tf4 à la fin.
+Si "display_name" est vide dans la même ligne echo : mettez TL-One tf4.
+Si ces lignes de noyau vous paraissent trop abîmées, vous pouvez les supprimer. Les lignes de fin (lignes_fin_dockerfile.txt) créent de toute façon les deux noyaux, tlone-tf4 et tlone-tf5.
+
+2. Contrôlez le texte avec Ctrl+F avant de le coller :
+
+envs// doit donner 0 résultat ;
+-n tlone-tf4 doit donner 1 résultat.
+
+3. Collez dans Domino (Edit Definition → Dockerfile Instructions), dans cet ordre :
+
+le Dockerfile ainsi corrigé ;
+juste sous la ligne RUN conda env create -v -n tlone-tf4 -f /tmp/environment.yml, le contenu de bloc_tlone_tf5.txt ;
+tout en bas, le contenu de lignes_fin_dockerfile.txt.
+
+4. Lancez Build. L’étape conda env create va maintenant installer tous les paquets de tlone-tf4 et prendra plusieurs minutes, c’est normal. Viendra ensuite l’étape tlone-tf5, puis à la fin tf4 OK … et tf5 OK ….
