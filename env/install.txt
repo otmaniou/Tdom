@@ -58,6 +58,13 @@ sed -i '1i name: tlone-tf5' /mnt/code/tlone-tf5.yaml
 head -3 /mnt/code/tlone-tf4.yaml /mnt/code/tlone-tf5.yaml
 
 
+
+rm -f /mnt/dockerfile/desired-packages/*.yaml
+cp /mnt/code/tlone-tf4.yaml /mnt/code/tlone-tf5.yaml /mnt/dockerfile/desired-packages/
+dws-dockerfile-create
+grep -n "conda env create" /mnt/dockerfile/Dockerfile
+
+
 cp /mnt/code/tlone-tf4.yaml /mnt/code/tlone-tf5.yaml /mnt/dockerfile/desired-packages/
 dws-dockerfile-create
 
