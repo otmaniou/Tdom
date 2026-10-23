@@ -23,3 +23,32 @@ cp /mnt/code/tlone-tf4.yaml /mnt/code/tlone-tf5.yaml /mnt/dockerfile/desired-pac
 
 
 dws-dockerfile-create
+
+
+
+
+/opt/conda/envs/tlone-tf4/bin/python -c "import transformers; print(transformers.__version__)"
+/opt/conda/envs/tlone-tf5/bin/python -c "import transformers; print(transformers.__version__)"
+
+
+
+
+/opt/conda/envs/tlone-tf4/bin/python -m pip install --no-cache-dir --force-reinstall --no-deps "transformers==4.57.1" "tokenizers==0.22.2" "huggingface_hub==0.36.2"
+/opt/conda/envs/tlone-tf4/bin/python -m pip install --no-cache-dir -r /mnt/code/tlone_app_v4/domino/env/requirements-tlone-tf4.txt
+/opt/conda/envs/tlone-tf4/bin/python -m pip check
+/opt/conda/envs/tlone-tf4/bin/python -c "import transformers, pytest, streamlit; print(transformers.__version__, pytest.__version__, streamlit.__version__)"
+
+
+
+cd /mnt/code/tlone_app_v4 && /opt/conda/envs/tlone-tf4/bin/python -m pytest -q tests
+
+
+
+dws-venv-export tlone-tf4
+grep -i "transformers" /mnt/code/tlone-tf4.yaml
+grep -i "transformers" /mnt/code/tlone-tf5.yaml
+
+
+cp /mnt/code/tlone-tf4.yaml /mnt/code/tlone-tf5.yaml /mnt/dockerfile/desired-packages/
+dws-dockerfile-create
+
