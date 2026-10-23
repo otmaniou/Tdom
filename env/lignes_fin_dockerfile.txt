@@ -1,0 +1,17 @@
+# =====================================================================================================
+# TL-One — lignes à AJOUTER à la FIN du Dockerfile produit par dws-dockerfile-create (révision 8)
+# =====================================================================================================
+# Coller ces lignes tout en bas des « Dockerfile Instructions », après le contenu généré.
+# Les versions sont déjà figées dans les YAML exportés (dws-venv-export) : ici, aucune installation.
+# Aucun secret : ne jamais recopier ici la ligne du jeton Artifactory.
+
+# --- 1. Cohérence des dépendances (le build échoue si un paquet est incompatible) ---------------------
+RUN /opt/conda/envs/tlone-tf4/bin/python -m pip check && /opt/conda/envs/tlone-tf5/bin/python -m pip check
+
+# --- 2. Noyaux Jupyter pour basculer tf4 / tf5 dans JupyterLab (Kernel > Change kernel) ---------------
+RUN /opt/conda/envs/tlone-tf4/bin/python -m ipykernel install --prefix /opt/conda --name tlone-tf4 --display-name "TL-One tf4 (transformers 4.57)" && \
+    /opt/conda/envs/tlone-tf5/bin/python -m ipykernel install --prefix /opt/conda --name tlone-tf5 --display-name "TL-One tf5 (transformers 5.20)"
+
+# --- 3. Contrôle final : le build ÉCHOUE si une version n'est pas la bonne -----------------------------
+RUN /opt/conda/envs/tlone-tf4/bin/python -c "import streamlit, pandas, numpy, openpyxl, xlrd, fitz, requests, nbclient, nbformat, ipykernel, rapidfuzz, accelerate, torch, transformers; assert transformers.__version__=='4.57.1', transformers.__version__; assert pandas.__version__=='2.3.3'; from transformers import AutoProcessor, AutoModelForVision2Seq, AutoModelForImageTextToText; print('tf4 OK', transformers.__version__, torch.__version__, streamlit.__version__)" && \
+    /opt/conda/envs/tlone-tf5/bin/python -c "import cv2, psutil, pandas, openpyxl, fitz, nbclient, nbformat, ipykernel, accelerate, torch, transformers; assert transformers.__version__=='5.20.1', transformers.__version__; from transformers import AutoProcessor, AutoModelForImageTextToText; from transformers import FineGrainedFP8Config; FineGrainedFP8Config(dequantize=True); print('tf5 OK', transformers.__version__, torch.__version__, cv2.__version__)"
