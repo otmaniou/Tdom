@@ -1,3 +1,6 @@
+
+dws-venv-create tlone-tf4
+
 pip install --no-cache-dir -r /mnt/code/tlone_app_v4/domino/env/requirements-tlone-tf4.txt
 python -c "import transformers, torch; print(transformers.__version__, torch.cuda.is_available())"
 
