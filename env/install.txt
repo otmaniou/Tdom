@@ -68,3 +68,31 @@ grep -n "conda env create" /mnt/dockerfile/Dockerfile
 cp /mnt/code/tlone-tf4.yaml /mnt/code/tlone-tf5.yaml /mnt/dockerfile/desired-packages/
 dws-dockerfile-create
 
+
+
+
+
+
+Ne laissez que le YAML de tlone-tf4, avec son nom en première ligne :
+   rm -f /mnt/dockerfile/desired-packages/*
+   head -2 /mnt/code/tlone-tf4.yaml
+
+Si la première ligne n’est pas name: tlone-tf4, ajoutez-la :
+
+   sed -i '1i name: tlone-tf4' /mnt/code/tlone-tf4.yaml
+
+Puis copiez-le et régénérez le Dockerfile :
+
+   cp /mnt/code/tlone-tf4.yaml /mnt/dockerfile/desired-packages/
+   dws-dockerfile-create
+Vérifiez le Dockerfile généré :
+   grep -n "conda env create\|envs/.*/bin/python" /mnt/dockerfile/Dockerfile | head
+
+Le chemin doit maintenant être /opt/conda/envs/tlone-tf4/bin/python, et non plus envs//bin.
+
+Dans Domino (Edit Definition → Dockerfile Instructions)
+
+Collez le nouveau Dockerfile généré.
+Juste sous la ligne RUN conda env create -v -f /tmp/environment.yml, collez tout le contenu de bloc_tlone_tf5.txt. Il doit être à cet endroit, avant « IMAGE FOOTER » : c’est là que l’accès Artifactory est encore configuré, et le Dockerfile l’efface ensuite.
+Tout en bas, après RUN echo "" && echo "[DWS] job done…", collez lignes_fin_dockerfile.txt.
+Lancez Build. À la fin du journal, vous devez voir tf4 OK 4.57.… puis tf5 OK 5.20.1 ….
