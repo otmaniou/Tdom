@@ -87,7 +87,9 @@ if not P.validation_xlsx.exists():
         if t is None:
             continue
         with t:
-            st.info(f"Classeur `{P.validation_xlsx.name}` absent : lancez la Partie 2.")
+            st.info(f"Classeur `{P.validation_xlsx.name}` absent : lancez la Partie 2." if ui.expert() else
+                    "Les contrôles automatiques n'ont pas encore été faits : ils démarrent d'eux-mêmes après la lecture, "
+                    "dès que l'export CarthagoDom est déposé (onglet ① Déposer et lire).")
     st.stop()
 
 
