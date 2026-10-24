@@ -297,6 +297,13 @@ def _cell_infos(P, m, x, lg, cell, lk, col):
                 "Une base RH erronée se remplace par un nouveau dépôt (page Transferts OV › Référentiels).")
         decided = True
     if col == "CARTHAGO" and not decided:
+        if cell["open"] and not cell["bloq"]:
+            # point « à vérifier » (ex. domiciliation trouvée, type DOM / PREDOM inconnu) : se confirme, tracé
+            if st.button("Confirmer : vérifié dans Carthago", type="primary", key=f"conf_{k}", **_W(),
+                         help="Vous avez vérifié dans CarthagoDom que cette domiciliation est bien celle du dossier "
+                              "(type DOM) : le point est accepté et tracé."):
+                _event(P, fichier, "CONFIRME", ligne=lk, col=col, valeur_vue=str(cell["value"]))
+                _after(m, lk, col, True)
         st.info("CarthagoDom est un référentiel : il ne se corrige pas ici. Si le n° lu sur le contrat est faux "
                 "ou vide, corrigez la case **CTR** de cette ligne : l'App refait aussitôt la comparaison avec "
                 "Carthago. Sinon mettez à jour l'export Carthago (onglet ① Traitement) et relancez la Partie 2, "

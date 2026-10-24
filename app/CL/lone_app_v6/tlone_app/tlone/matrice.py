@@ -972,7 +972,8 @@ def summary(m: dict) -> dict:
         "TYPE": "Augmentation" + (f" {r.get('AUGMENTATION_YEAR')}" if not is_blank(r.get("AUGMENTATION_YEAR")) else "")
         if m["aug"] else "Nouveau contrat",
         "FIABILITE": dq, "A_REVOIR": m["n_open"], "BLOQUANTS": m["n_bloq"],
-        "CARTHAGO": "Confirmé" if car_st in CARTHAGO_OK else ("Non trouvé" if car_st else "—"),
+        "CARTHAGO": "Confirmé" if car_st in CARTHAGO_OK else (
+            "Trouvé, type à vérifier" if car_st in CARTHAGO_A_VERIFIER else ("Non trouvé" if car_st else "—")),
         "STATUT": statut,
         "_red": {k: red(k) for k in ("debut_permis", "fin_permis", "part", "taux", "permis", "nom", "compte")},
     }
