@@ -339,3 +339,7 @@ grep -h '"step"\|"status"' $TLONE_DATA_ROOT/document_pipeline/runs/*.status.json
 
 
 
+
+/opt/conda/envs/tlone-tf4/bin/python /mnt/code/tlone_app_v4/run_worker.py --arreter --data-root /domino/datasets/local/TL_one_domino/document_pipeline/employeurs/TOSYALI
+
+
