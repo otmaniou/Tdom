@@ -37,8 +37,10 @@ RH_ARBITRE = {"nom", "pere", "mere", "naissance", "compte", "permis"}
 DOC_OF_COL = {"DOM": "ENGAGEMENT_DOMICILIATION", "CTS": "CONTRAT_SPECIFIQUE",
               "CTR": "CONTRAT_TRAVAIL", "TTR": "TITRE_TRAVAIL"}
 CARTHAGO_OK = {"EXACT_DOMICILIATION_REFERENCE_MATCH"}
-CARTHAGO_A_VERIFIER = {"EXACT_DOMICILIATION_REFERENCE_MATCH_TYPE_UNKNOWN"}
+CARTHAGO_A_VERIFIER = {"EXACT_DOMICILIATION_REFERENCE_MATCH_TYPE_UNKNOWN", "TROUVE_PAR_TLONE"}
 CARTHAGO_MSG = {
+    "TROUVE_PAR_TLONE": "non rapproché par la Partie 2 (compte lu différent ?), retrouvé par TL-One dans l'export "
+                        "CarthagoDom : à vérifier",
     "CARTHAGO_FILE_MISSING": "export Carthago absent",
     "SIEGE_RACINE_NOT_FOUND": "identifiant client introuvable dans le compte",
     "CLIENT_NOT_FOUND": "client absent de Carthago",
@@ -384,6 +386,7 @@ class Lot:
     agences: dict = field(default_factory=dict)       # (client, n° DOM compact) -> agence (export Carthago)
     rh: dict = field(default_factory=dict)            # client (ID tiers) -> ligne de la base RH (mois entier, la plus récente)
     mots_cles: list = field(default_factory=list)     # mots-clés de l'employeur (registre) : « TOSYALI »
+    carthago_export: list = field(default_factory=list)  # lignes de l'export CarthagoDom (secours du rapprochement)
 
 
 def _read(csv: Path, xlsx: Path, sheet: str) -> pd.DataFrame:
@@ -410,6 +413,7 @@ def load_lot(P) -> Lot:
         lot.by_file = {k: g for k, g in fld.groupby(fld["FICHIER"].astype(str))}
         lot.champs_connus = set(fld["CHAMP"].astype(str)) if "CHAMP" in fld.columns else set()
     lot.agences = _agences_carthago(getattr(P, "carthago_xlsx", None))
+    lot.carthago_export = _export_carthago(getattr(P, "carthago_xlsx", None))
     lot.rh = _rh_par_client(P)
     lot.mots_cles = mots_cles_employeur(P)
     return lot
@@ -467,6 +471,69 @@ def _agences_carthago(path) -> dict:
         return out
     except Exception:
         return {}
+
+
+def _export_carthago(path) -> list[dict]:
+    """Export CarthagoDom brut : client, nom, n° DOM, agence (secours quand la Partie 2 n'a rien rapproché)."""
+    if not path or not Path(path).exists():
+        return []
+    try:
+        from . import carthago
+        cols = carthago.detect(carthago.read_headers(Path(path)))
+        if not cols["client"]:
+            return []
+        out = []
+        for _, df in pd.read_excel(path, sheet_name=None, dtype=str).items():
+            if cols["client"] not in df.columns:
+                continue
+            get = lambda r, k: (None if not cols.get(k) or cols[k] not in df.columns or is_blank(r[cols[k]])  # noqa: E731
+                                else str(r[cols[k]]).strip())
+            for _, r in df.iterrows():
+                cl = siege_racine(r[cols["client"]]) or digits(r[cols["client"]])
+                if cl:
+                    out.append({"client": cl, "nom": get(r, "name"), "dom": get(r, "dom_ref"), "agence": get(r, "agence")})
+        return out
+    except Exception:
+        return []
+
+
+def _carthago_secours(lot: "Lot", fichier: str, compte, nom) -> dict:
+    """Partie 2 sans rapprochement : recherche dans l'export CarthagoDom par l'identifiant client du compte
+    (lu ou corrigé), puis par celui du nom du fichier (07310-108448-…), puis par le nom du salarié (≥ 90 %, un seul
+    client)."""
+    ex = lot.carthago_export
+    hits, how = [], None
+    for cl, lib in ((siege_racine(compte) if compte else None, "identifiant client du compte"),
+                    (siege_racine(Path(fichier).stem), "identifiant client du nom du fichier")):
+        if cl:
+            hits = [e for e in ex if e["client"] == cl]
+            if hits:
+                how = lib
+                break
+    if not hits and nom:
+        best = [e for e in ex if (name_similarity(nom, e["nom"]) or 0) >= SEUIL_NOM]
+        if len({e["client"] for e in best}) == 1:
+            hits, how = best, "nom du salarié"
+    if not hits:
+        return {}
+    cands = list(dict.fromkeys(e["dom"] for e in hits if e["dom"]))
+    h = hits[0]
+    return {"CARTHAGO_CLIENT": h["client"], "CARTHAGO_NOM_COMPLET": h["nom"],
+            "CARTHAGO_NUM_DOM_RAW": cands[0] if len(cands) == 1 else None, "CARTHAGO_AGENCE": h["agence"],
+            "_CANDIDATS": cands, "_SECOURS": how}
+
+
+def proposition_compte(compte, client: str) -> str | None:
+    """Compte lu avec un identifiant client faux : même compte avec l'identifiant Carthago, préfixe 02700 si besoin,
+    retenu seulement si la clé Modulo 97 est juste."""
+    d = digits(compte)
+    if len(d) != 20 or not client or len(client) != 11:
+        return None
+    for pre in (d[:4], "0270"):
+        c = pre + client + d[15:]
+        if int(c[3:20]) % 97 == 0:
+            return c
+    return None
 
 
 # ----------------------------------------------------------------------------- journal
@@ -719,7 +786,8 @@ def _value_issues(lg: Ligne, col: str, cell: dict) -> list[tuple[str, str]]:
     return []
 
 
-CARTHAGO_RECALCUL = {"NUMERO_DOMICILIATION_NOT_NORMALIZABLE", "NO_EXACT_DOMICILIATION_REFERENCE_MATCH"}
+CARTHAGO_RECALCUL = {"NUMERO_DOMICILIATION_NOT_NORMALIZABLE", "NO_EXACT_DOMICILIATION_REFERENCE_MATCH",
+                     "TROUVE_PAR_TLONE"}
 
 
 def _domref_recalcul(cells: dict) -> None:
@@ -801,6 +869,16 @@ def build(lot: Lot, fichier: str, state: dict | None = None, sources: dict | Non
                 row[ch] = v
     car = _carthago_row(lot, fichier)
     state = state or {"cells": {}, "sources": {}, "decision": None, "history": []}
+    if not car.get("CARTHAGO_CLIENT") and _txt(row.get("CARTHAGO_MATCH_STATUS")) not in CARTHAGO_OK | CARTHAGO_A_VERIFIER \
+            and lot.carthago_export:
+        ev = state["cells"].get("compte|DOM")
+        compte = ev.get("valeur") if ev and ev.get("action") == "CORRIGE" else (
+            row.get("DOM_COMPTE_LOCAL_NORMALIZED") or row.get("DOM_COMPTE_LOCAL"))
+        fb = _carthago_secours(lot, fichier, compte,
+                               row.get("CTS_NOM_PRENOM_TRAVAILLEUR") or row.get("NOM_TRAVAILLEUR_REFERENCE"))
+        if fb:
+            car = fb
+            row["CARTHAGO_MATCH_STATUS"] = "TROUVE_PAR_TLONE"
     src = dict(sources or default_sources())
     src.update({k: v for k, v in state.get("sources", {}).items() if k in LIGNE_BY_KEY})
     aug = str(row.get("TYPE_DOSSIER") or "").upper() == "AUGMENTATION"
@@ -839,6 +917,14 @@ def build(lot: Lot, fichier: str, state: dict | None = None, sources: dict | Non
             # CHAMPS_DETAIL, la case s'affiche et se contrôle comme les autres (aucun code à changer).
             cell["a_extraire"] = (isinstance(spec, str) and spec in CHAMPS_A_EXTRAIRE and is_blank(cell["value"])
                                   and spec not in lot.champs_connus)
+        if lg.key == "compte" and car.get("_SECOURS"):
+            cl_lu = siege_racine(cells["DOM"]["value"])
+            if cl_lu and cl_lu != car["CARTHAGO_CLIENT"]:
+                prop = proposition_compte(cells["DOM"]["value"], car["CARTHAGO_CLIENT"])
+                cells["DOM"]["issues"].append(("incoh", f"Identifiant client lu {cl_lu} ≠ client Carthago "
+                                                        f"{car['CARTHAGO_CLIENT']} (trouvé par l'{car['_SECOURS']}) : "
+                                                        "compte probablement mal lu" +
+                                                        (f" — proposition : {prop} (clé Modulo 97 juste)" if prop else "")))
         ctx[lg.key] = {c: cell["value"] for c, cell in cells.items()}
         _cross_issues(lg, cells, ctx)
         ref = src.get(lg.key) if lg.ref else None
