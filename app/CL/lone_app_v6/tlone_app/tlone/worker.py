@@ -53,6 +53,11 @@ def heartbeat_path(s: Settings) -> Path:
     return s.common_dir / "worker" / "worker_heartbeat.json"
 
 
+def stop_path(s: Settings) -> Path:
+    """Demande d'arrêt déposée par « run_worker.py --arreter » (depuis n'importe quel terminal)."""
+    return s.common_dir / "worker" / "STOP"
+
+
 def legacy_heartbeat_path(s: Settings) -> Path:
     """Emplacement du signal de vie des versions précédentes (worker lancé depuis tlone_app_v1…v3)."""
     return s.paths.runs_dir / "worker_heartbeat.json"
@@ -364,15 +369,29 @@ class Worker:
         print(f"[worker] TL-One {APP_VERSION} — code {APP_DIR}\n"
               f"[worker] données {self.s.paths.data_root} — étapes {self.steps} — Ctrl+C pour arrêter\n"
               f"[worker] signal de vie : {heartbeat_path(self.s)}\n"
-              f"[worker] file des demandes : {queue_dir(self.s)}", flush=True)
-        self.start_beating()
-        self.probe_env()
-        for st, e in self.env.items():
-            v = e["versions"] or {}
-            print(f"[worker] {st} : {e['python']} — transformers {v.get('transformers')}", flush=True)
+              f"[worker] file des demandes : {queue_dir(self.s)}\n"
+              f"[worker] arrêt : Ctrl+C ici, ou depuis un autre terminal : {sys.executable} "
+              f"{APP_DIR / 'run_worker.py'} --arreter --data-root {self.s.paths.data_root}", flush=True)
         try:
+            stop_path(self.s).unlink()          # demande d'arrêt restée d'un lancement précédent
+        except OSError:
+            pass
+        if not once and threading.current_thread() is threading.main_thread():
+            import signal
+
+            def _term(signum, frame):           # pkill / kill : même arrêt propre que Ctrl+C (GPU libéré)
+                raise KeyboardInterrupt
+            signal.signal(signal.SIGTERM, _term)
+        try:
+            self.start_beating()
+            self.probe_env()
+            for st, e in self.env.items():
+                v = e["versions"] or {}
+                print(f"[worker] {st} : {e['python']} — transformers {v.get('transformers')}", flush=True)
             if self.prewarm:
                 for st in self.steps:
+                    if self._arret_demande():
+                        raise KeyboardInterrupt
                     self.beat(f"CHARGEMENT {st}")
                     try:
                         w = WarmNotebook(self.s, st, self.pythons.get(st))
@@ -389,6 +408,8 @@ class Worker:
             self.beat("ATTENTE")
             print("[worker] prêt : en attente des demandes de l'App", flush=True)
             while True:
+                if self._arret_demande():
+                    break
                 got = self.next_request()
                 if got:
                     path, req = got
@@ -409,9 +430,23 @@ class Worker:
             self._stop.set()  # fin du battement en tâche de fond
             if not once:  # arrêt réel : on libère le GPU et on signale l'arrêt à l'App
                 self.stop()
+                print("[worker] arrêté : modèles déchargés, GPU libéré, signal de vie effacé", flush=True)
+
+    def _arret_demande(self) -> bool:
+        p = stop_path(self.s)
+        if not p.exists():
+            return False
+        try:
+            p.unlink()
+        except OSError:
+            pass
+        print("\n[worker] arrêt demandé (commande --arreter)", flush=True)
+        return True
 
     def stop(self) -> None:
         self._stop.set()
+        if self._beater is not None and self._beater is not threading.current_thread():
+            self._beater.join(timeout=5)      # pas de battement réécrit après l'effacement
         for w in self.warm.values():
             w.shutdown()
         self.warm.clear()
@@ -428,6 +463,9 @@ def main(argv: list[str]) -> int:
                     help="étapes GPU gardées en mémoire (dom_extract,ov_extract ; une seule si la mémoire GPU manque)")
     ap.add_argument("--prewarm", action="store_true", help="charger les modèles dès le démarrage")
     ap.add_argument("--data-root", default=None)
+    ap.add_argument("--arreter", action="store_true",
+                    help="demander l'arrêt du worker en cours (depuis un autre terminal) et attendre sa confirmation")
+    ap.add_argument("--attente", type=int, default=180, help="avec --arreter : secondes d'attente maximum")
     a = ap.parse_args(argv)
     if a.data_root:
         os.environ["TLONE_DATA_ROOT"] = a.data_root
@@ -440,9 +478,33 @@ def main(argv: list[str]) -> int:
             print("[worker] ATTENTION : TLONE_DATA_ROOT absent et aucun dossier …/employeurs/<CODE> trouvé : le "
                   "signal de vie irait dans /mnt/data, invisible pour l'App. Relancer avec --data-root "
                   "/domino/datasets/local/<projet>/document_pipeline/employeurs/<CODE>", flush=True)
+    if a.arreter:
+        return arreter(load_settings(), a.attente)
     steps = [x.strip() for x in a.steps.split(",") if x.strip() in GPU_STEPS]
     Worker(load_settings(), steps, prewarm=a.prewarm).loop()
     return 0
+
+
+def arreter(s: Settings, attente: int = 180) -> int:
+    """Dépose la demande d'arrêt et attend que le worker l'ait prise en compte (signal de vie effacé)."""
+    hb = heartbeat_path(s)
+    d = worker_signal(s)
+    if not hb.exists():
+        print(f"[arrêt] aucun worker en cours (pas de signal de vie dans {hb.parent})")
+        return 0
+    pid, host = (d or {}).get("pid"), (d or {}).get("host")
+    stop_path(s).parent.mkdir(parents=True, exist_ok=True)
+    stop_path(s).write_text(datetime.now().isoformat(timespec="seconds"), encoding="utf-8")
+    print(f"[arrêt] demande déposée pour le worker {pid} sur {host} ; un traitement en cours se termine d'abord")
+    t0 = time.time()
+    while time.time() - t0 < attente:
+        if not hb.exists():
+            print(f"[arrêt] worker arrêté en {time.time() - t0:.0f} s (modèles déchargés, GPU libéré)")
+            return 0
+        time.sleep(1)
+    print(f"[arrêt] toujours actif après {attente} s (traitement long ?). Forcer : kill {pid} (sur {host}), puis "
+          "vérifier nvidia-smi")
+    return 1
 
 
 def _auto_data_root() -> Path | None:
