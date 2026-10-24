@@ -1,1 +1,2 @@
-
+export TLONE_OV_NOTEBOOK=pipeline_ocr_vl30.ipynb
+/opt/conda/envs/tlone-tf4/bin/python /mnt/code/tlone_app_v4/run_worker.py --steps dom_extract,ov_extract --prewarm --data-root /domino/datasets/local/TL_one_domino/document_pipeline/employeurs/TOSYALI
