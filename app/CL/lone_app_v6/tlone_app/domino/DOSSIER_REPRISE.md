@@ -400,3 +400,16 @@ Les écarts tolérés restent visibles (ⓘ « Tolérance appliquée » dans la 
 - **Signatures, mention « lu et approuvé », cachet, date de signature** : non obligatoires pour le moment
   (`TLONE_DOM_FACULTATIFS`, défaut `sig_trav,lu_approuve,sig_emp,cachet,date_sig`). Visa inspection : inchangé.
 - Notebooks Partie 1 / Partie 2 non modifiés : les tolérances sont appliquées par l'App sur leurs sorties.
+
+### 24/10/2026 — Arrêt du worker sans Ctrl+C (livré)
+- `run_worker.py --arreter --data-root <dossier employeur>` depuis n'importe quel terminal : dépose
+  `_commun/worker/STOP`, attend (180 s max, `--attente`) que le worker s'arrête et le confirme.
+- `kill` / `pkill -f run_worker.py` (SIGTERM) = même arrêt propre que Ctrl+C : noyaux des modèles fermés (GPU libéré),
+  signal de vie effacé. Protection dès le démarrage du worker (avant le chargement des modèles).
+- Le worker affiche au démarrage la commande d'arrêt, et à l'arrêt « arrêté : modèles déchargés, GPU libéré ».
+
+### 24/10/2026 — Carthago « trouvée, type DOM/PREDOM inconnu » (corrigé)
+- Point « à vérifier » non bloquant, mais la case CarthagoDom n'offrait aucun bouton : dossier invalidable.
+  Bouton **« Confirmer : vérifié dans Carthago »** (tracé CONFIRME) sur une case Carthago à vérifier ; un point
+  bloquant Carthago reste non confirmable (corriger le CTR, mettre à jour l'export ou rejeter).
+- En-tête / liste : « Trouvé, type à vérifier » au lieu de « Non trouvé » pour ce statut.
