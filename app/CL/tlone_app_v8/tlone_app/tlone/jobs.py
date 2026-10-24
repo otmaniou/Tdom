@@ -67,6 +67,8 @@ def launch(s: Settings, step: str, max_items: int | None = None, user: str | Non
     rec = {"run_id": run_id, "step": step, "mode": s.run_mode, "max_items": max_items,
            "user": user, "launched_at": datetime.now().isoformat(timespec="seconds"),
            "data_root": str(s.paths.data_root), "employeur": s.employeur}
+    if ensuite is None and step == "dom_extract" and s.run_mode == "worker":
+        ensuite = "dom_post"          # la lecture DOM est toujours suivie des contrôles (Partie 2), quelle que soit la vue
     if ensuite:
         rec["ensuite"] = ensuite
 

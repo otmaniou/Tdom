@@ -537,6 +537,12 @@ def _dernier(s, steps: tuple) -> dict | None:
     return rs[0] if rs else None
 
 
+def _prerequis(r: dict) -> str:
+    if r.get("contrôle") == "Export CarthagoDom":
+        return "déposez l'export CarthagoDom (« Référentiel CarthagoDom » ci-dessous)"
+    return f"{r.get('contrôle')} : {r.get('action') or r.get('valeur')}"
+
+
 def lecture_panel(s, step: str, titre: str, explication: str, dossier: Path, upload_key: str,
                   ensuite: str | None = None) -> None:
     """Vue essentielle : déposer des documents (un seul ou des centaines) puis un bouton « Faire lire par l'IA ».
@@ -586,14 +592,46 @@ def lecture_panel(s, step: str, titre: str, explication: str, dossier: Path, upl
                     st.markdown(f"- **{r['contrôle']}** : {r.get('valeur') or ''}"
                                 + (f"  \n  → `{r['action']}`" if "run_worker.py" in str(r.get("action") or "")
                                    else (f"  \n  → {r['action']}" if r.get("action") else "")))
+        ko_suite = preflight.blocking(preflight.check_step(s, ensuite)) if ensuite else []
+        ko_suite = [r for r in ko_suite if r.get("contrôle") not in ("JSON de la Partie 1",) and
+                    not str(r.get("contrôle", "")).startswith("Extraction")]
+        if ensuite and nouveaux and ko_suite:
+            st.warning("Avant de lancer la lecture : " + " · ".join(_prerequis(r) for r in ko_suite)
+                       + ". La lecture et les contrôles automatiques s'enchaînent : ils démarreront ensemble.")
         lab = (f"▶ Faire lire {len(nouveaux)} document(s) par l'IA" if nouveaux else "Aucun nouveau document à lire")
-        if st.button(lab, type="primary", disabled=bool(ko) or not nouveaux, key=f"lire_{step}", **W):
+        if st.button(lab, type="primary", disabled=bool(ko) or bool(ko_suite) or not nouveaux, key=f"lire_{step}", **W):
             try:
                 rec = jobs.launch(s, step, None, current_user(), ensuite=ensuite if s.run_mode == "worker" else None)
                 audit(s.paths.audit_log, "JOB_LAUNCH", current_user(), **{k: v for k, v in rec.items() if k != "user"})
                 st.rerun()
             except Exception as exc:  # noqa: BLE001
                 st.error(f"Lecture impossible : {exc}")
+        # lecture terminée sans contrôles (ex. export CarthagoDom déposé après la fin de la lecture) : rattrapage
+        l1, l2 = _dernier(s, (step,)), (_dernier(s, (ensuite,)) if ensuite else None)
+        manque_suite = bool(ensuite and l1 and l1.get("status") == "SUCCEEDED"
+                            and (not l2 or str(l2.get("launched_at") or "") < str(l1.get("finished_at") or "")))
+        if manque_suite:
+            if ko_suite:
+                st.warning("La lecture est terminée, mais les contrôles automatiques n'ont pas pu démarrer : "
+                           + " · ".join(_prerequis(r) for r in ko_suite) + ". Ensuite, cliquez sur « Lancer les "
+                           "contrôles ».")
+            else:
+                # lecture terminée sans contrôles (ancien worker, export déposé après coup…) : enchaînement automatique
+                try:
+                    rec = jobs.launch(s, ensuite, None, current_user())
+                    audit(s.paths.audit_log, "JOB_LAUNCH_AUTO", current_user(),
+                          **{k: v for k, v in rec.items() if k != "user"})
+                    st.rerun()
+                except Exception as exc:  # noqa: BLE001
+                    st.error(f"Contrôles automatiques non lancés : {exc}")
+            if st.button("▶ Lancer les contrôles", type="primary", disabled=bool(ko_suite), key=f"suite_{step}", **W):
+                try:
+                    rec = jobs.launch(s, ensuite, None, current_user())
+                    audit(s.paths.audit_log, "JOB_LAUNCH", current_user(), **{k: v for k, v in rec.items() if k != "user"})
+                    st.rerun()
+                except Exception as exc:  # noqa: BLE001
+                    st.error(f"Contrôles impossibles : {exc}")
+            return
         last = _dernier(s, steps)
         if last and last.get("status") == "FAILED":
             st.error(f"Le dernier traitement ({LIB_ETAPE.get(last.get('step'), last.get('step'))}) s'est arrêté sur une "

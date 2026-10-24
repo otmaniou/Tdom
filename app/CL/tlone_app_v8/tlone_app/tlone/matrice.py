@@ -387,8 +387,11 @@ class Lot:
 
 
 def _read(csv: Path, xlsx: Path, sheet: str) -> pd.DataFrame:
-    if csv.exists():
-        return pd.read_csv(csv, dtype=object, encoding="utf-8-sig")
+    if csv.exists() and csv.stat().st_size > 0:
+        try:
+            return pd.read_csv(csv, dtype=object, encoding="utf-8-sig")
+        except pd.errors.EmptyDataError:   # CSV vide (aucun rapprochement Carthago) : feuille du classeur
+            pass
     if xlsx.exists():
         try:
             return pd.read_excel(xlsx, sheet_name=sheet, dtype=object)
