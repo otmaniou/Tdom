@@ -1,0 +1,109 @@
+# TL-One — Procédure Domino (état réel du projet TL_one_domino)
+
+Projet **à fichiers Domino** (pas de Git) : le code vit dans `/mnt/code`, les données dans
+le dataset monté sous `/mnt/data/document_pipeline`. On enregistre avec
+**File Changes › Sync All Changes** (pas de `git commit`).
+
+## 1. Arborescence
+
+```
+/mnt/code/
+├── app.sh                 ← lanceur de l'App Domino (copie de domino/app.sh.racine)
+└── tlone_app_v4/          ← une version de l'app = un dossier (v1, v2, v3… versions précédentes)
+    ├── Accueil.py  app.sh  run_step.py  requirements.txt  MANIFEST.md5
+    ├── pages/  tlone/  tests/  notebooks/  domino/
+
+/mnt/data/document_pipeline/
+├── _commun/ {carthago, salaries, atlas/blocages, atlas/soldes, reglementaire, _modeles}
+└── employeurs/TOSYALI/          ← TLONE_DATA_ROOT
+    ├── domiciliations_in/  transferts_in/  transferts_out/  referentiels/
+    ├── Dossier de domiciliation.xlsx  parametres_augmentation.xlsx
+    └── document_pipeline/V15_A/ {01_extraction_raw, 02_postprocessing, 02b_validation_app,
+                                  03_planning_tl, 04_transferts}  + runs/
+```
+Changer de version : modifier la ligne de `/mnt/code/app.sh` (ex. `tlone_app_v3` → `tlone_app_v4`), Stop/Start de l'App, puis relancer le worker depuis le nouveau dossier.
+
+## 2. Environnement `tlone` (Govern › Environments) — révision 8, chaîne DWS
+
+Workspace GPU (base *Domino DWS Ingenuity GPU Standard 1.1.1*), terminal :
+1. `dws` ; `dws-venv-create tlone-tf4` puis, dans tlone-tf4 : `pip install --no-cache-dir -r domino/env/requirements-tlone-tf4.txt`
+   (104 paquets figés, transformers 4.57.1) ; idem `tlone-tf5` avec `requirements-tlone-tf5.txt` (97 paquets, transformers 5.20.1).
+2. `dws-venv-export tlone-tf4` et `dws-venv-export tlone-tf5` → `/mnt/code/tlone-tf4.yaml`, `/mnt/code/tlone-tf5.yaml`.
+3. `dws-dockerfile-init` ; copier les deux YAML dans `/mnt/dockerfile/desired-packages/` ; `dws-dockerfile-create`.
+4. Govern › Environments › Create New Environment › « Start from an existing Environment » (base) › Customize ;
+   Dockerfile Instructions = Dockerfile généré + à la fin `domino/env/lignes_fin_dockerfile.txt` ; Pluggable Workspace
+   Tools = script habituel ; Pre Run Script = `bash /dws/git/git_update_dws.sh` ; Build → logs `tf4 OK 4.57.1` / `tf5 OK 5.20.1`.
+- transformers 4.57.0 est retiré de PyPI : 4.57.1 (même API). Jamais le Dockerfile généré dans le projet (jeton).
+
+## 3. Variables d'environnement du projet (Settings)
+
+| Variable | Valeur |
+|---|---|
+| `TLONE_DATA_ROOT` | `/mnt/data/document_pipeline/employeurs/TOSYALI` |
+| `TLONE_RUN_MODE` | `domino` |
+| `TLONE_GPU_TIER` | identifiant du tier H100 (ex. `shared-gpu-12x48-H100-1x80`) |
+| `TLONE_ENV_ID` | (facultatif) ID de l'environnement `tlone` si ce n'est pas celui par défaut du projet |
+
+Par défaut chaque étape prend son environnement conda : Partie 1 → `tlone-tf5`,
+Partie 2 et v26 → `tlone-tf4` (`TLONE_<ETAPE>_PYTHON` pour forcer un autre interpréteur).
+
+## 4. Vérifier dans un workspace (environnement `tlone`, tier GPU)
+
+```bash
+cd /mnt/code/tlone_app_v4
+python3 verifier_copie.py --reparer   # copie par copier-coller : fins de ligne remises en LF, puis
+                                      # « 60/60 fichiers identiques » attendu (sinon recopier les DIFFERENT)
+/opt/conda/envs/tlone-tf4/bin/python -m pytest -q tests     # tous les tests « passed »
+/opt/conda/envs/tlone-tf4/bin/python domino/check_env.py    # environnements, GPU, modèles, prérequis
+```
+
+## 5. Publier l'App (Deployments › App)
+
+1. Code : `code/app.sh` (le lanceur racine).
+2. Environment : **tlone**, révision Active (7).
+3. Hardware : tier **CPU** (l'App ne charge aucun modèle ; les extractions partent en jobs GPU).
+4. Data : dataset `document_pipeline` monté.
+5. Access : **Restricted** (données clients).
+6. Logs attendus : rapport `[TL-One] Contrôle de démarrage …`, puis `You can now view your Streamlit app`.
+
+## 6. Premier parcours de test
+
+1. **Accueil** : bandeau du contrôle de démarrage — corriger les points BLOQUANTS indiqués.
+2. **Contrôles DOM › ① Traitement** : déposer 2 PDF, « Copier », puis Partie 1 avec N = 2
+   (cocher la confirmation). Suivre le job dans Jobs ; puis Partie 2.
+3. **② Dossiers & validation** : ouvrir un dossier, cliquer les cases rouges, corriger /
+   confirmer, valider ou rejeter.
+4. **Planning TL** : générer (dossiers validés dans la matrice uniquement).
+5. **Transferts OV** : déposer les OV, extraction v26, puis **③ Dossiers & validation**.
+
+Un job lancé par erreur : Jobs › cocher › Stop, puis dans l'app « Marquer abandonné ».
+
+## 7. Démonstrations : worker GPU (modèle chargé une seule fois)
+
+Pas de Domino Job : un **worker** tourne dans un workspace GPU que vous ouvrez vous-même ;
+l'App lui confie les extractions. Le modèle est chargé une fois, puis chaque demande ne fait
+que le traitement des PDF. Les notebooks ne sont pas modifiés.
+
+1. Variable du projet : `TLONE_RUN_MODE=worker` ; App publiée sur un **tier CPU** (Stop/Start).
+2. Workspace sur le tier **H100**, environnement `tlone`, puis dans un terminal :
+   ```bash
+   /opt/conda/envs/tlone-tf4/bin/python /mnt/code/tlone_app_v4/run_worker.py --steps dom_extract,ov_extract --prewarm \
+       --data-root /domino/datasets/local/TL_one_domino/document_pipeline/employeurs/TOSYALI
+   ```
+   - Toujours lancer le worker depuis **le même dossier de version que l'App** (tlone_app_v4) et avec
+     `--data-root` : il écrit alors son signal de vie dans `document_pipeline/_commun/worker/`, là où l'App
+     le cherche (un seul worker pour tous les employeurs). Les 4 premières lignes affichées par le worker
+     donnent la version, le dossier des données, le signal de vie et la file des demandes : le chemin du
+     signal de vie doit être celui affiché par l'App en rouge.
+   - La commande exacte est aussi affichée dans l'App (barre latérale › « Commande de lancement du worker »).
+   - `--steps dom_extract` : Partie 1 seulement (Qwen3.8-27B ≈ 55 Go de mémoire GPU) ;
+     `--steps dom_extract,ov_extract` charge aussi Qwen2.5-VL-7B (≈ 70 Go au total : à essayer avant la démo).
+   - `--prewarm` : charge les modèles tout de suite (sinon à la première demande).
+   - Pendant le chargement (plusieurs minutes) l'App affiche « Moteur IA en cours de chargement » (orange) ;
+     puis « Moteur IA prêt » (vert). Le signal de vie est écrit toutes les 15 s, même pendant un long lot.
+3. Dans l'App : déposer les PDF, « Lancer » → le worker traite, l'App suit le statut (Rafraîchir).
+   La Partie 2 (CPU) est exécutée par le worker également.
+4. Fin de démo : **Ctrl+C** dans le terminal (libère le GPU), puis arrêter le workspace.
+
+Le terminal du worker affiche la progression du notebook en direct ; le journal de chaque demande
+est aussi dans `document_pipeline/runs/<run_id>.log`.

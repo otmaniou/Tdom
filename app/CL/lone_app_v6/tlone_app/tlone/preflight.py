@@ -1,0 +1,293 @@
+"""Contrôle de démarrage TL-One : vérifie TOUS les prérequis avant d'ouvrir l'app
+ou de lancer un traitement. Aucun paquet n'est installé, rien n'est modifié.
+
+    python -m tlone.preflight            # rapport complet (workspace, logs de l'App)
+    python -m tlone.preflight dom_extract  # prérequis d'une étape
+
+Niveaux : OK · ATTENTION (l'app marche, mais à corriger) · BLOQUANT (lancement interdit).
+"""
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+import sys
+from datetime import datetime, timedelta
+from functools import lru_cache
+from pathlib import Path
+
+from .config import APP_DIR, NOTEBOOK_DIR, STEPS, Settings, load_settings
+
+OK, WARN, KO = "OK", "ATTENTION", "BLOQUANT"
+
+# Bibliothèques exigées par interpréteur (l'image Docker doit les contenir).
+APP_MODULES = ["streamlit", "pandas", "openpyxl", "fitz", "requests", "nbclient", "nbformat", "ipykernel"]
+STEP_MODULES = {
+    "dom_extract": ["torch", "transformers", "fitz", "pandas", "nbclient", "nbformat", "ipykernel"],
+    "dom_post": ["pandas", "openpyxl", "nbclient", "nbformat", "ipykernel"],
+    "ov_extract": ["torch", "transformers", "fitz", "pandas", "openpyxl", "nbclient", "nbformat", "ipykernel"],
+}
+# Version de transformers attendue par étape (préfixe).
+TRANSFORMERS_PREFIX = {"dom_extract": "5.", "ov_extract": "4.57"}
+MODEL_DEFAULT = {
+    "dom_extract": "/domino/edv/modelhub/ModelHub-model-huggingface-Qwen/Qwen3.8-27B-FP8/main",
+    "ov_extract": "/domino/edv/modelhub/ModelHub-model-huggingface-Qwen/Qwen2.5-VL-7B-Instruct/main",
+}
+PENDING_MAX_AGE = timedelta(hours=3)
+
+_PROBE = r'''
+import importlib, json, sys
+mods = json.loads(sys.argv[1]); r = {"python": sys.version.split()[0]}
+for m in mods:
+    try:
+        mod = importlib.import_module(m); r[m] = str(getattr(mod, "__version__", "ok"))
+    except Exception:
+        r[m] = None
+if "torch" in mods and r.get("torch"):
+    import torch; r["cuda"] = bool(torch.cuda.is_available())
+print(json.dumps(r))
+'''
+
+
+def _row(level, item, value="", hint=""):
+    return {"niveau": level, "contrôle": item, "valeur": str(value), "action": hint}
+
+
+def probe_python(py: str, modules: list[str]) -> dict | None:
+    """Importe les modules dans l'interpréteur `py` (sous-processus) ; None si inutilisable.
+    Résultat mis en cache pour la durée du processus (l'image ne change pas en cours de route)."""
+    return _probe_cached(py, tuple(modules))
+
+
+@lru_cache(maxsize=32)
+def _probe_cached(py: str, modules: tuple) -> dict | None:
+    try:
+        out = subprocess.run([py, "-c", _PROBE, json.dumps(list(modules))], capture_output=True,
+                             text=True, timeout=180)
+        return json.loads(out.stdout.strip().splitlines()[-1])
+    except Exception:
+        return None
+
+
+def count_pdfs(folder: Path) -> int:
+    return sum(1 for p in folder.iterdir() if p.is_file() and p.suffix.lower() == ".pdf") if folder.is_dir() else 0
+
+
+def step_input(s: Settings, step: str) -> tuple[str, Path, int]:
+    P = s.paths
+    if step == "dom_extract":
+        return "PDF DOM à traiter", P.dom_in, count_pdfs(P.dom_in)
+    if step == "ov_extract":
+        return "PDF OV à traiter", P.tr_in, count_pdfs(P.tr_in)
+    n = len(list(P.raw_json_dir.glob("*.json"))) if P.raw_json_dir.is_dir() else 0
+    return "JSON de la Partie 1", P.raw_json_dir, n
+
+
+def pending_runs(s: Settings, step: str) -> list[dict]:
+    from . import jobs
+    now = datetime.now()
+    out = []
+    for r in jobs.list_runs(s, 200):
+        if r.get("step") != step or r.get("status") not in ("EN_FILE", "RUNNING"):
+            continue
+        try:
+            if now - datetime.fromisoformat(r["launched_at"]) > PENDING_MAX_AGE:
+                continue
+        except Exception:
+            pass
+        out.append(r)
+    return out
+
+
+def check_general(s: Settings) -> list[dict]:
+    rows = []
+    P = s.paths
+    env_root = os.environ.get("TLONE_DATA_ROOT")
+    if not env_root:
+        rows.append(_row(KO, "TLONE_DATA_ROOT", "non défini → /mnt/data",
+                         "Settings du projet > Environment variables : "
+                         "TLONE_DATA_ROOT=/domino/datasets/local/TL_one_domino/document_pipeline/employeurs/TOSYALI"))
+    if not P.data_root.is_dir():
+        rows.append(_row(KO, "Dossier de données", P.data_root, "Dossier absent : vérifier le dataset monté "
+                                                                "(étape Data de l'App / du job)"))
+    elif not os.access(P.data_root, os.W_OK):
+        rows.append(_row(KO, "Dossier de données", P.data_root, "Lecture seule : le dataset doit être monté en écriture"))
+    else:
+        rows.append(_row(OK, "Dossier de données", P.data_root))
+
+    for step, nb in s.notebooks.items():
+        rows.append(_row(OK if nb.exists() else KO, f"Notebook {step}", nb.name,
+                         "" if nb.exists() else f"Copier le notebook dans {NOTEBOOK_DIR}"))
+
+    r = probe_python(sys.executable, APP_MODULES) or {}
+    miss = [m for m in APP_MODULES if not r.get(m)]
+    rows.append(_row(KO if miss else OK, "Bibliothèques de l'app", sys.executable,
+                     f"Manquent dans l'image : {', '.join(miss)} → révision d'environnement" if miss else ""))
+
+    rows.append(_row(OK, "Mode d'exécution", s.run_mode))
+    if s.run_mode == "worker":
+        from .worker import commande_worker, worker_absent_text, worker_state
+        w = worker_state(s)
+        rows.append(_row(OK if w else KO, "Worker GPU",
+                         f"actif sur {w['host']} — {w['state']} — modèles chargés : {', '.join(w['warm']) or 'aucun'}"
+                         if w else worker_absent_text(s),
+                         "" if w else f"Dans un workspace GPU : {commande_worker(s)}"))
+    if s.run_mode == "domino":
+        if not os.environ.get("DOMINO_PROJECT_ID"):
+            rows.append(_row(KO, "DOMINO_PROJECT_ID", "absent", "Mode domino hors Domino : TLONE_RUN_MODE=local"))
+        if not (os.environ.get("DOMINO_API_PROXY") or
+                (os.environ.get("DOMINO_API_HOST") and os.environ.get("DOMINO_USER_API_KEY"))):
+            rows.append(_row(KO, "Accès API Domino", "aucun jeton", "Impossible de lancer des jobs"))
+
+    c = P.carthago_xlsx
+    if not c.exists():
+        rows.append(_row(WARN, "Export CarthagoDom", c.name, "Absent : la Partie 2 ne fera aucun rapprochement"))
+    else:
+        rows += check_carthago(c)
+    rows.append(_row(OK if P.param_aug_xlsx.exists() else WARN, "Calendrier des augmentations",
+                     P.param_aug_xlsx.name, "" if P.param_aug_xlsx.exists() else "Onglet ⑤ Paramètres"))
+    return rows
+
+
+def check_carthago(path: Path) -> list[dict]:
+    """Mêmes règles que la Partie 2, avec la détection tolérante des en-têtes (tlone.carthago)."""
+    from . import carthago
+    try:
+        headers = carthago.read_headers(path)
+    except Exception as exc:
+        return [_row(KO, "Export CarthagoDom", path.name, f"Illisible : {exc}")]
+    c = carthago.detect(headers)
+    lus = "En-têtes lus : " + " | ".join(headers)
+    rows = [
+        _row(OK if c["client"] else KO, "Colonne Carthago « Client »", c["client"] or "absente",
+             "" if c["client"] else lus + " → TLONE_CARTHAGO_CLIENT_COL"),
+        _row(OK if c["name"] else KO, "Colonne Carthago « Nom complet/Raison sociale »", c["name"] or "absente",
+             "" if c["name"] else lus + " → TLONE_CARTHAGO_NAME_COL"),
+        _row(OK if c["dom_ref"] else WARN, "Colonne Carthago « N° de domiciliation »", c["dom_ref"] or "absente",
+             "" if c["dom_ref"] else "Sans elle, aucun n° de domiciliation ne sera proposé. " + lus
+             + " → TLONE_CARTHAGO_DOM_REF_COL"),
+    ]
+    return rows
+
+
+def _lib_rows(step: str, py: str, r: dict | None, where: str) -> list[dict]:
+    if r is None:
+        return [_row(KO, f"Python {step}{where}", py, "Interpréteur inutilisable")]
+    mods = STEP_MODULES[step]
+    miss = [m for m in mods if not r.get(m)]
+    rows = [_row(KO if miss else OK, f"Bibliothèques {step}{where}", py, f"Manquent : {', '.join(miss)}" if miss else "")]
+    want = TRANSFORMERS_PREFIX.get(step)
+    if want and r.get("transformers"):
+        good = str(r["transformers"]).startswith(want)
+        rows.append(_row(OK if good else KO, f"transformers {step}{where}", r["transformers"],
+                         "" if good else f"Attendu {want}x"))
+    return rows
+
+
+def check_step(s: Settings, step: str) -> list[dict]:
+    rows = []
+    rt = s.step_runtime(step)
+    label, folder, n = step_input(s, step)
+    rows.append(_row(OK if n else KO, label, f"{n} dans {folder}",
+                     "" if n else ("Déposer puis cliquer « Copier … »" if step != "dom_post"
+                                   else "Lancer d'abord l'extraction DOM (Partie 1)")))
+    if step == "dom_post":
+        if s.paths.carthago_xlsx.exists():
+            rows += [r for r in check_carthago(s.paths.carthago_xlsx) if r["niveau"] != OK]
+        else:
+            rows.append(_row(KO, "Export CarthagoDom", "absent", "Déposer « Dossier de domiciliation.xlsx »"))
+
+    py = rt["python"]
+    wenv, w = None, None
+    if s.run_mode == "worker":  # les notebooks tournent dans le workspace du worker : on contrôle SON environnement
+        from .worker import commande_worker, worker_state
+        w = worker_state(s)
+        wenv = (w or {}).get("env") or None
+    if w and w.get("app_dir") and str(w["app_dir"]) != str(APP_DIR):
+        rows.append(_row(KO, "Dossier du worker", f"worker lancé depuis {w['app_dir']}",
+                         f"L'App tourne depuis {APP_DIR} : le worker exécuterait une autre version (notebook, "
+                         f"contrôles). Ctrl+C puis : {commande_worker(s)}"))
+    if wenv is not None:
+        e = wenv.get(step)
+        err = ((w or {}).get("errors") or {}).get(step)
+        if err:
+            rows.append(_row(KO, f"Worker {step}", f"chargement en échec : {err}",
+                             "Voir le terminal du worker, corriger puis relancer le worker"))
+        if e is not None:
+            rows += _lib_rows(step, e["python"], e.get("versions"), " (worker)")
+        if STEPS[step]["gpu"] and step not in (w or {}).get("steps", []):
+            rows.append(_row(WARN, f"Worker {step}", "modèle non préchargé par le worker",
+                             "Fonctionne, mais le modèle est rechargé à chaque demande. Pour une démo : relancer le "
+                             "worker avec --steps dom_extract,ov_extract --prewarm"))
+    elif s.run_mode == "worker":
+        pass  # worker absent : le point bloquant « Worker GPU » ci-dessous suffit
+    elif not Path(py).exists():
+        rows.append(_row(KO, f"Python {step}", py, f"Interpréteur absent : TLONE_{step.upper()}_PYTHON"))
+    else:
+        rows += _lib_rows(step, py, probe_python(py, STEP_MODULES[step]), "")
+
+    if s.run_mode == "worker":
+        from .worker import commande_worker, worker_absent_text, worker_state
+        if not worker_state(s):
+            rows.append(_row(KO, "Worker GPU", worker_absent_text(s),
+                             f"Lancer dans un workspace GPU : {commande_worker(s)}"))
+    if STEPS[step]["gpu"]:
+        model = rt["model"] or MODEL_DEFAULT[step]
+        here = Path(model).is_dir()
+        # En mode domino le modèle est lu par le job : absent ici = ModelHub non monté sur l'App (simple alerte).
+        lvl = OK if here else (WARN if s.run_mode in ("domino", "worker") else KO)
+        rows.append(_row(lvl, f"Modèle {step}", model,
+                         "" if here else "ModelHub non visible ici : vérifier qu'il est monté sur le job"))
+        if s.run_mode == "domino":
+            rows.append(_row(OK if rt["tier"] else KO, "Tier GPU du job", rt["tier"] or "non défini",
+                             "" if rt["tier"] else "Définir TLONE_GPU_TIER (identifiant du tier H100) — "
+                                                   "sinon le job part sur le tier par défaut du projet (CPU)"))
+    elif s.run_mode == "domino":
+        rows.append(_row(OK if rt["tier"] else WARN, "Tier CPU du job", rt["tier"] or "défaut du projet",
+                         "" if rt["tier"] else "Définir TLONE_CPU_TIER (identifiant d'un tier CPU) — sinon le job "
+                                               "prend le tier par défaut du projet, qui peut être un GPU"))
+    if s.run_mode == "domino":
+        rows.append(_row(OK if rt["environment"] else WARN, "Environnement du job",
+                         rt["environment"] or "défaut du projet",
+                         "" if rt["environment"] else "Vérifier que l'environnement par défaut du projet est « tlone »"
+                                                      " (ou définir TLONE_ENV_ID)"))
+    pend = pending_runs(s, step)
+    if pend:
+        rows.append(_row(KO, "Run déjà en cours", ", ".join(r["run_id"] for r in pend),
+                         "Attendre la fin, ou l'arrêter dans Jobs puis « Marquer abandonné »"))
+    if step == "dom_post":  # la Partie 2 doit attendre la fin de l'extraction DOM (sinon JSON incomplets)
+        amont = pending_runs(s, "dom_extract")
+        if amont:
+            rows.append(_row(KO, "Extraction DOM en cours", ", ".join(r["run_id"] for r in amont),
+                             "Attendre la fin de la Partie 1 avant de lancer la Partie 2"))
+    return rows
+
+
+def blocking(rows: list[dict]) -> list[dict]:
+    return [r for r in rows if r["niveau"] == KO]
+
+
+def report(s: Settings | None = None, steps=None) -> list[dict]:
+    s = s or load_settings()
+    rows = [dict(r, étape="général") for r in check_general(s)]
+    for st in steps or list(STEPS):
+        rows += [dict(r, étape=st) for r in check_step(s, st)]
+    return rows
+
+
+def main(argv: list[str]) -> int:
+    s = load_settings()
+    steps = [a for a in argv if a in STEPS] or list(STEPS)
+    rows = report(s, steps)
+    icon = {OK: "✅", WARN: "⚠️ ", KO: "❌"}
+    print(f"[TL-One] Contrôle de démarrage — app {APP_DIR} — données {s.paths.data_root} — mode {s.run_mode}")
+    for r in rows:
+        line = f"  {icon[r['niveau']]} [{r['étape']}] {r['contrôle']} : {r['valeur']}"
+        print(line + (f"  → {r['action']}" if r["action"] else ""))
+    n_ko = len(blocking(rows))
+    print(f"[TL-One] {'PRÊT' if not n_ko else f'{n_ko} point(s) BLOQUANT(S)'}")
+    return 1 if n_ko else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
