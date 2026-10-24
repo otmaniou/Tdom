@@ -2086,6 +2086,42 @@ def test_carthago_type_inconnu_se_confirme(env):
     assert not car["open"] and car["edit"]["action"] == "CONFIRME"
 
 
+def test_carthago_secours_compte_mal_lu(env):
+    """Compte mal lu (0 lu 6) : la Partie 2 ne rapproche rien ; TL-One retrouve le client dans l'export CarthagoDom
+    (nom du fichier / nom du salarié), signale le compte et propose le compte à clé juste ; après correction du
+    compte, le rapprochement se fait par le compte."""
+    p, _ = env
+    from tlone import matrice
+    f = "07310-108448-I.pdf"
+    ok_compte = "02700731010844800130"
+    assert matrice.proposition_compte("02760731016844800130", "07310108448") == ok_compte
+
+    def build(journal):
+        lot = matrice.load_lot(p)
+        base = lot.dossiers.iloc[0].copy()
+        base["FICHIER"] = f
+        for k in ("DOM_COMPTE_LOCAL", "DOM_COMPTE_LOCAL_NORMALIZED"):
+            base[k] = "02760731016844800130"
+        base["CARTHAGO_MATCH_STATUS"] = "NO_EXACT_DOMICILIATION_REFERENCE_MATCH"
+        base["CTS_NOM_PRENOM_TRAVAILLEUR"] = "ONAY CAN"
+        import pandas as _pd
+        lot.dossiers = _pd.concat([lot.dossiers, base.to_frame().T], ignore_index=True)
+        lot.carthago_export = [{"client": "07310108448", "nom": "ONAY CAN", "dom": "27190120261400069DZD",
+                                "agence": "Agence Mostaghanem"}]
+        st = matrice.fold(journal).get(f)
+        m = matrice.build(lot, f, st, matrice.default_sources())
+        return m, {x["ligne"].key: x for x in m["rows"]}
+    m, L = build([])
+    assert matrice.summary(m)["CARTHAGO"] == "Trouvé, type à vérifier"
+    assert L["domref"]["cells"]["CARTHAGO"]["value"] == "27190120261400069DZD"
+    assert any(ok_compte in t for _k, t in L["compte"]["cells"]["DOM"]["issues"])
+    j = [{"fichier": f, "action": "CORRIGE", "ligne": "compte", "col": "DOM", "valeur": ok_compte, "user": "v",
+          "ts": "2026-10-24T23:00:00"}]
+    m, L = build(j)
+    assert not any("mal lu" in t for _k, t in L["compte"]["cells"]["DOM"]["issues"])
+    assert L["domref"]["cells"]["CARTHAGO"]["value"] == "27190120261400069DZD"
+
+
 def test_avancement_lecture(env):
     """Barre de progression : PDF déposés sans JSON = à lire ; JSON écrits depuis le lancement = lus."""
     import json as _json
