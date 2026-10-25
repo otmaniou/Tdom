@@ -1387,7 +1387,7 @@ def test_controles_ov_base_rh(tmp_path):
     _, rows = transfers.control_dossier(d2, pd.DataFrame(), pd.DataFrame(columns=["PERIODE_ID", "DOM_ID", "FICHIER", "_MONTANT"]),
                                         pd.DataFrame(), pd.DataFrame(), s, rh=rhdf)
     c = {r["CODE"]: r for r in rows}
-    assert c["R02"]["RESULTAT"] == "KO" and c["R02"]["SEVERITE"] == "BLOQUANT" and c["R03"]["RESULTAT"] == "KO"
+    assert c["R02"]["RESULTAT"] == "KO" and c["R02"]["SEVERITE"] == "INFO" and c["R03"]["RESULTAT"] == "KO"
 
 
 def test_ov_p2_non_rattache_a_la_p1_de_l_ancienne_dom():
@@ -1608,6 +1608,7 @@ def test_compte_donneur_ordre_ligne_zone50_et_swift():
     from tlone.common import compte_ov, fmt_compte, fmt_iban
     assert compte_ov("210620260731010844800130") == ("02700731010844800130", _d(2026, 6, 21))
     assert compte_ov("21|06|2026|07310|108448|001|30 DZD")[0] == "02700731010844800130"
+    assert compte_ov("2405260731010844800130") == ("02700731010844800130", _d(2026, 5, 24))   # date jj|mm|aa
     assert compte_ov("0731010844800130")[0] == compte_ov("02700731010844800130")[0] == "02700731010844800130"
     assert fmt_compte("02700731010844800130") == "027 007310 108448 001 30"
     assert fmt_iban("TR270006701000000043536510") == "TR27 0006 7010 0000 0043 5365 10"
