@@ -2220,3 +2220,37 @@ def test_worker_libre_apres_controles(env, monkeypatch):
     w.handle({"run_id": "dom_post_x", "step": "dom_post"})
     st_ = worker.worker_state(s)
     assert w.current is None and st_["state"] == "ATTENTE" and st_["current"] is None
+
+
+def test_blocage_regles_agence():
+    """Blocage sans attendre la conformité : existant suffisant si ≥ OV + 3 700 ; nouveau = OV arrondi au millier
+    inférieur + 5 000 ; du plus ancien au plus récent tant que le solde le permet ; OV déposé non saisi inclus."""
+    from datetime import date
+    from tlone import execution as ex
+    T = lambda r, p, m: {"REF_TL": r, "CLIENT": "07310108448", "NOM": "X", "PERIODE": p, "MOIS": p[:7], "TRANCHE": None,  # noqa: E731
+                         "OBJET": p, "STATUT_TRADE": "En cours d'execution", "MONTANT_TRADE": m, "STATUT_PERIODE": "OK",
+                         "COMPLEMENT": None}
+    trade = pd.DataFrame([T("M5", "2026-05", 690231.17), T("M6", "2026-06", 690231.17), T("M7", "2026-07", 731175.88),
+                          T("M8", "2026-08", 731175.88), T("M9", "2026-09", 0.0)])
+    bl = pd.DataFrame([{"CLIENT": "07310108448", "PERIODE": p, "MONTANT_BLOCAGE": 695000.0, "DATE_LIMITE": date(2099, 1, 1),
+                        "REFERENCE_DENOTAGE": "x"} for p in ("2026-05", "2026-06")])
+    per = ["2026-05", "2026-06", "2026-07", "2026-08", "2026-09", "2026-10"]
+    sy = pd.DataFrame([{"FICHIER": f"f{i}", "SIEGE_RACINE": "07310108448", "PERIODE_TL": p, "NOM": "X",
+                        "MONTANT_OV": 690231.17 if i < 2 else 731175.88} for i, p in enumerate(per)])
+    ch = pd.DataFrame([{"FICHIER": f, "CODE": "T11", "RESULTAT": "KO", "SEVERITE": "BLOQUANT"} for f in ("f2", "f3", "f4")])
+    dec = pd.DataFrame({"FICHIER": ["f0", "f1"], "DECISION": ["VALIDE"] * 2})
+    vig = {f"f{i}": "RAS" for i in range(6)}
+    so = pd.DataFrame([{"CLIENT": "07310108448", "ORDINAL": "001", "SOLDE_DISPO": 1_500_000.0}])
+    pl = ex.plan(trade, None, bl, so, sy, ch, dec, vig).set_index("REF_TL")
+    assert pl.loc["M5", "STATUT"] == "A_EXECUTER" and pl.loc["M5", "BLOCAGE"] == "OK"      # 695 000 ≥ OV + 3 700
+    assert ex.montant_blocage(731175.88) == 736000.0 and ex.montant_blocage(690231.17) == 695000.0
+    assert pl.loc["M7", "STATUT"] == "COMPLEMENT" and pl.loc["M7", "BLOCAGE"] == "A_BLOQUER"   # non conforme : on bloque
+    assert pl.loc["M7", "RESTE_A_BLOQUER"] == 736000.0
+    assert pl.loc["M8", "BLOCAGE"] == "A_BLOQUER"                  # 1 500 000 − 736 000 = 764 000 ≥ 736 000
+    assert pl.loc["M8", "SOLDE_APRES_BLOCAGE"] == 28000.0
+    # 09 saisi à 0,00 dans Trade : blocage au montant de l'OV ; solde restant 28 000 insuffisant -> les suivants attendent
+    assert pl.loc["M9", "BLOCAGE"] == "SOLDE_INSUFFISANT" and pl.loc["M9", "RESTE_A_BLOQUER"] == 736000.0
+    assert pl.loc["OV:f5", "STATUT"] == "A_SAISIR" and pl.loc["OV:f5", "BLOCAGE"] == "SOLDE_INSUFFISANT"
+    fb = ex.fichier_blocages(pl.reset_index(), date(2026, 10, 25))
+    assert list(fb["REFERENCE DENOTAGE DU MOUVEMENT"]) == ["072026", "082026"]
+    assert list(fb["MT BLOCAGE DEV CPT"]) == [736000.0, 736000.0]
