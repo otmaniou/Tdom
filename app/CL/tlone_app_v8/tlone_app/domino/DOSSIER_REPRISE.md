@@ -483,3 +483,10 @@ Les écarts tolérés restent visibles (ⓘ « Tolérance appliquée » dans la 
   « à revoir » à non conforme.
 - **T10** (95 % du net) : calculé uniquement sur le net à payer du bulletin. Le repli sur le salaire de l'Annexe II
   est supprimé (il affichait dans la colonne Bulletin un montant absent du bulletin).
+
+### 25/10/2026 (après-midi) — Base RH à titre d'information, date jj|mm|aa en zone 50 (livré)
+- **R02** (montant OV = part de la base RH) passe en **information** : affiché (ⓘ, case non rouge), il ne rend plus le
+  dossier « à revoir » ni bloquant. Le montant reste plafonné par T09 à T13 (Annexe II, 95 % du net, Planning, ATF,
+  autorisation).
+- **Zone 50** : la date collée au compte peut aussi être sur 6 chiffres (jj|mm|aa, ex. 24|05|26) ; le RIB est
+  reconstitué de même (clé Modulo 97 juste).
