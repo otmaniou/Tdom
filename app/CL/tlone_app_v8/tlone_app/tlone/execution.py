@@ -7,16 +7,19 @@ est un TL saisi par l'agence et non encore exécuté. Pour chacun, l'app vérifi
   * dossier scanné et validé dans TL-One (OV + Annexe I + Annexe II + bulletin, contrôles T01–T17) ;
   * domiciliation (Planning), ATF, autorisation, plafonds — d'après les contrôles du dossier OV ;
   * vigilance RAS ou HIT levé ;
-  * blocage des fonds : blocage existant (même client, dénotage = période) d'un montant ≥ TL + 5 000 DZD.
+  * blocage des fonds, sans attendre la conformité (salaire perçu = solde suffisant, OV déposé) : blocage existant
+    suffisant s'il dépasse le montant OV d'au moins 3 700 DZD ; sinon nouveau blocage = OV arrondi au millier
+    inférieur + 5 000 DZD (690 231,17 -> 695 000), du plus ancien au plus récent tant que le solde le permet.
 Statut : A_EXECUTER (tout est conforme et bloqué) · A_BLOQUER (conforme, blocage à faire, solde suffisant) ·
 COMPLEMENT (pièce ou contrôle manquant, motifs listés) · DOUBLON · SOLDE_INSUFFISANT ·
 ANOMALIE (« Exécuté » dans CarthagoTrade sans débit Atlas : ni exécuté, ni en cours).
 Seul un débit Atlas fait foi d'exécution.
-Le fichier de blocages pour l'agence ne contient que des TL dont le blocage garde le compte créditeur :
-Solde_Dispo − Σ(montant TL + 5 000) ≥ 0, par client, en commençant par les périodes les plus anciennes.
+Le fichier de blocages pour l'agence ne contient que des blocages qui gardent le compte créditeur :
+Solde_Dispo − Σ(blocages) ≥ 0, par client, en commençant par les périodes les plus anciennes.
 """
 from __future__ import annotations
 
+import math
 from datetime import date, timedelta
 
 import pandas as pd
@@ -39,8 +42,16 @@ MOTIF_CONTROLE = {
 LIB_STATUT = {"A_EXECUTER": "Sera exécuté", "A_BLOQUER": "Sera exécuté après blocage des fonds",
               "COMPLEMENT": "En attente de complément", "DOUBLON": "TL en double — à annuler",
               "SOLDE_INSUFFISANT": "Solde insuffisant pour le blocage",
-              "ANOMALIE": "Anomalie : « Exécuté » dans CarthagoTrade sans débit Atlas"}
+              "ANOMALIE": "Anomalie : « Exécuté » dans CarthagoTrade sans débit Atlas",
+              "A_SAISIR": "OV reçu, TL à saisir par l'agence"}
+LIB_BLOCAGE = {"OK": "✅ Bloqué", "A_BLOQUER": "🔒 À bloquer", "SOLDE_INSUFFISANT": "💰 Solde insuffisant",
+               "SOLDE_INCONNU": "❔ Solde inconnu", "SANS_OBJET": "—"}
 MOTIF_ANOMALIE = "Statut « Exécuté » dans CarthagoTrade mais aucun débit dans Atlas : à vérifier avec l'agence"
+
+
+def _fr(x: float, dec: int = 2) -> str:
+    """690231.17 -> '690 231,17'."""
+    return f"{x:,.{dec}f}".replace(",", " ").replace(".", ",")
 
 
 def denotage(periode: str | None) -> str | None:
@@ -99,17 +110,30 @@ def debut_blocage(files: dict) -> tuple[date, str]:
     return date.today() + timedelta(days=1), "J+1 d'aujourd'hui (aucune date d'extraction dans les noms de fichiers)"
 
 
+def montant_blocage(montant_ov: float, majoration: float = 5000.0, arrondi: float = 1000.0) -> float:
+    """Nouveau blocage : montant OV arrondi au millier inférieur + 5 000 DZD (690 231,17 -> 695 000)."""
+    return float(math.floor(float(montant_ov) / arrondi) * arrondi + majoration) if arrondi else round(float(montant_ov) + majoration, 2)
+
+
 def plan(trade: pd.DataFrame, atlas: pd.DataFrame | None, blocage: pd.DataFrame | None,
          soldes: pd.DataFrame | None, ov_synth: pd.DataFrame | None, ov_checks: pd.DataFrame | None,
          decisions: pd.DataFrame | None, vigilance: dict | None, majoration: float = 5000.0,
-         tol: float = 1.0, planning: pd.DataFrame | None = None) -> pd.DataFrame:
-    """Une ligne par TL en attente, avec statut, motifs, blocage existant et montant à bloquer."""
-    pen_all = pending(trade, atlas, anomalies=True)
-    if pen_all.empty:
+         tol: float = 1.0, planning: pd.DataFrame | None = None, marge_min: float = 3700.0,
+         arrondi: float = 1000.0) -> pd.DataFrame:
+    """Une ligne par TL en attente (et par OV déposé pas encore saisi dans CarthagoTrade), avec statut d'exécution,
+    motifs, blocage existant et blocage à faire.
+
+    Blocage (indépendant de la conformité : salaire perçu = solde suffisant, OV déposé) :
+      * blocage existant suffisant s'il dépasse le montant OV d'au moins `marge_min` (3 700 DZD) ;
+      * sinon nouveau blocage = montant OV arrondi au millier inférieur + `majoration` (5 000 DZD), moins l'existant ;
+      * par client, des périodes les plus anciennes aux plus récentes, tant que le solde le permet."""
+    pen_all = pending(trade, atlas, anomalies=True) if trade is not None and not trade.empty else pd.DataFrame()
+    sy = ov_synth if ov_synth is not None else pd.DataFrame(columns=["FICHIER", "SIEGE_RACINE", "PERIODE_TL"])
+    if pen_all.empty and sy.empty:
         return pd.DataFrame()
-    anom = pen_all[pen_all["ETAT_TL"] == "ANOMALIE"]
-    pen = pen_all[pen_all["ETAT_TL"] == "EN_ATTENTE"].reset_index(drop=True)
-    t_all = trade.drop_duplicates("REF_TL")
+    anom = pen_all[pen_all["ETAT_TL"] == "ANOMALIE"] if not pen_all.empty else pen_all
+    pen = pen_all[pen_all["ETAT_TL"] == "EN_ATTENTE"].reset_index(drop=True) if not pen_all.empty else pen_all
+    t_all = trade.drop_duplicates("REF_TL") if trade is not None and not trade.empty else pd.DataFrame(columns=["REF_TL"])
     executes = t_all[t_all["REF_TL"].isin(_debites(atlas))]   # seul un débit Atlas fait foi
     # index (client, mois) : 12 000 TL exécutés et ~1 000 en attente sans comparaison deux à deux
     def _idx(df):
@@ -118,7 +142,6 @@ def plan(trade: pd.DataFrame, atlas: pd.DataFrame | None, blocage: pd.DataFrame 
             out.setdefault((x.get("CLIENT"), x.get("MOIS")), []).append(x)
         return out
     i_pen, i_exe, i_ano = _idx(pen), _idx(executes), _idx(anom)
-    sy = ov_synth if ov_synth is not None else pd.DataFrame(columns=["FICHIER", "SIEGE_RACINE", "PERIODE_TL"])
     ch = ov_checks if ov_checks is not None else pd.DataFrame(columns=["FICHIER", "CODE", "RESULTAT", "SEVERITE"])
     dec = (decisions.drop_duplicates("FICHIER", keep="last").set_index("FICHIER")["DECISION"].to_dict()
            if decisions is not None and not decisions.empty else {})
@@ -131,10 +154,26 @@ def plan(trade: pd.DataFrame, atlas: pd.DataFrame | None, blocage: pd.DataFrame 
             i_sy.setdefault((a_, b_), []).append(i)
     ko_par_fichier = ch[ch["RESULTAT"] == "KO"].groupby("FICHIER")["CODE"].apply(list).to_dict() if not ch.empty else {}
     ex_pm = _periode_index(planning) if planning is not None and not planning.empty else None
+
+    def _blocage(client, periode, mt_ref, alertes):
+        """(montant déjà bloqué, date limite, besoin ? , reste à bloquer, cible)"""
+        b = bl[(bl["CLIENT"] == client) & (bl["PERIODE"] == periode)] if not bl.empty else bl
+        bloque = float(b["MONTANT_BLOCAGE"].fillna(0).sum()) if not b.empty else 0.0
+        lim = b["DATE_LIMITE"].dropna().max() if not b.empty else None
+        if not b.empty and lim is not None and lim < date.today():
+            alertes.append(f"Blocage échu le {lim:%d/%m/%Y} : à refaire")
+            bloque = 0.0
+        if mt_ref is None or mt_ref <= 0:
+            return bloque, lim, False, 0.0, None
+        if bloque + tol >= mt_ref + marge_min:
+            return bloque, lim, False, 0.0, None
+        cible = montant_blocage(mt_ref, majoration, arrondi)
+        return bloque, lim, True, round(max(0.0, cible - bloque), 2), cible
+
     rows = []
     for _, r in pen.iterrows():
         d = r.to_dict()
-        motifs = []
+        motifs, alertes = [], []
         # doublons
         k = (d.get("CLIENT"), d.get("MOIS"))
         autres = [x for x in i_pen.get(k, []) if x["REF_TL"] != d["REF_TL"]]
@@ -154,11 +193,14 @@ def plan(trade: pd.DataFrame, atlas: pd.DataFrame | None, blocage: pd.DataFrame 
                     motifs.append(f"Complément : déjà transféré {deja:,.2f} + {float(d.get('MONTANT_TRADE') or 0):,.2f} "
                                   f"> part de la période {float(pr['MONTANT_MAX_THEORIQUE']):,.2f}")
         alerte = [x["REF_TL"] for x in i_ano.get(k, []) if _conflit(d, x)]
+        if alerte:
+            alertes.append(f"Même période que {', '.join(alerte)} (« Exécuté » Trade sans débit Atlas)")
         if d.get("STATUT_PERIODE") != "OK":
             motifs.append(f"Période de l'objet du transfert à préciser (« {d.get('OBJET')} »)")
         # dossier OV dans TL-One (même client, même période)
         cand = sy.iloc[i_sy.get((str(d["CLIENT"]), str(d["PERIODE"])), [])] if not sy.empty and d.get("PERIODE") else sy.iloc[0:0]
         fichier = cand["FICHIER"].iloc[0] if not cand.empty else None
+        mt_ov = None
         if fichier is None:
             motifs.append("Dossier non scanné / non extrait dans TL-One (OV, Annexes, bulletin)")
         else:
@@ -173,41 +215,62 @@ def plan(trade: pd.DataFrame, atlas: pd.DataFrame | None, blocage: pd.DataFrame 
                                "EN_ATTENTE": "Vigilance : retour attendu", "KO_A_REFAIRE": "Vigilance à refaire",
                                "A_VERIFIER": "Vigilance : résultat à vérifier"}.get(v, "Vigilance à faire"))
             mt_ov = cand["MONTANT_OV"].iloc[0] if "MONTANT_OV" in cand else None
-            if mt_ov is not None and not pd.isna(mt_ov) and d.get("MONTANT_TRADE") is not None \
-                    and abs(float(mt_ov) - float(d["MONTANT_TRADE"])) > tol:
-                motifs.append(f"Montant Trade {d['MONTANT_TRADE']:,.2f} ≠ montant OV {float(mt_ov):,.2f}")
-        # blocage existant
-        a_bloquer = round(float(d.get("MONTANT_TRADE") or 0) + majoration, 2)
-        b = bl[(bl["CLIENT"] == d["CLIENT"]) & (bl["PERIODE"] == d.get("PERIODE"))] if not bl.empty else bl
-        bloque = float(b["MONTANT_BLOCAGE"].fillna(0).sum()) if not b.empty else 0.0
-        lim = b["DATE_LIMITE"].dropna().max() if not b.empty else None
-        if not b.empty and lim is not None and lim < date.today():
-            motifs.append(f"Blocage échu le {lim:%d/%m/%Y}")
-            bloque = 0.0
-        statut = ("DOUBLON" if dbl else "COMPLEMENT" if motifs else
-                  "A_EXECUTER" if bloque + tol >= a_bloquer else "A_BLOQUER")
+            mt_ov = None if mt_ov is None or pd.isna(mt_ov) else float(mt_ov)
+            if mt_ov is not None and d.get("MONTANT_TRADE") is not None \
+                    and abs(mt_ov - float(d["MONTANT_TRADE"])) > tol:
+                motifs.append(f"Montant Trade {d['MONTANT_TRADE']:,.2f} ≠ montant OV {mt_ov:,.2f}")
+        # blocage : montant de l'OV déposé (à défaut celui de CarthagoTrade), sans attendre la conformité
+        mt_ref = mt_ov if mt_ov else (float(d.get("MONTANT_TRADE") or 0) or None)
+        bloque, lim, besoin, reste, cible = _blocage(d["CLIENT"], d.get("PERIODE"), mt_ref, alertes)
+        rejete = fichier is not None and dec.get(fichier) == "REJETE"
+        bloc = ("SANS_OBJET" if dbl or rejete or mt_ref is None else "A_BLOQUER" if besoin else "OK")
+        statut = ("DOUBLON" if dbl else "COMPLEMENT" if motifs else "A_EXECUTER" if bloc == "OK" else "A_BLOQUER")
         rows.append({
             "REF_TL": d["REF_TL"], "CLIENT": d["CLIENT"], "NOM": d.get("NOM"), "PERIODE": d.get("PERIODE"),
-            "OBJET": d.get("OBJET"), "MONTANT_TL": d.get("MONTANT_TRADE"), "STATUT_TRADE": d.get("STATUT_TRADE"),
+            "OBJET": d.get("OBJET"), "MONTANT_TL": d.get("MONTANT_TRADE"), "MONTANT_OV": mt_ov,
+            "STATUT_TRADE": d.get("STATUT_TRADE"),
             "DOSSIER_TLONE": fichier, "STATUT_VIGILANCE": vig.get(fichier) if fichier else None,
-            "MONTANT_BLOQUE": round(bloque, 2), "DATE_LIMITE_BLOCAGE": lim, "MONTANT_A_BLOQUER": a_bloquer,
-            "RESTE_A_BLOQUER": round(max(0.0, a_bloquer - bloque), 2), "DOUBLON_AVEC": ", ".join(dbl),
-            "STATUT": statut, "MOTIFS": " | ".join(dict.fromkeys(motifs)),
-            "ALERTE": (f"Même période que {', '.join(alerte)} (« Exécuté » Trade sans débit Atlas)" if alerte else ""),
+            "MONTANT_BLOQUE": round(bloque, 2), "DATE_LIMITE_BLOCAGE": lim, "MONTANT_A_BLOQUER": cible,
+            "RESTE_A_BLOQUER": reste, "BLOCAGE": bloc, "DOUBLON_AVEC": ", ".join(dbl),
+            "STATUT": statut, "MOTIFS": " | ".join(dict.fromkeys(motifs)), "ALERTE": " | ".join(alertes),
         })
+    # OV déposés dans TL-One et pas encore saisis dans CarthagoTrade : blocage possible dès le dépôt
+    if not sy.empty:
+        connus = pen_all.to_dict("records") + executes.to_dict("records") if not pen_all.empty else executes.to_dict("records")
+        idx_c = _idx(pd.DataFrame(connus)) if connus else {}
+        for x in sy.to_dict("records"):
+            per = str(x.get("PERIODE_TL") or "")
+            if not per or per in ("nan", "None") or dec.get(x["FICHIER"]) == "REJETE":
+                continue
+            dd = {"CLIENT": str(x["SIEGE_RACINE"]), "MOIS": per[:7], "TRANCHE": per[7:] or None}
+            if any(_conflit(dd, y) for y in idx_c.get((dd["CLIENT"], dd["MOIS"]), [])):
+                continue
+            mt = x.get("MONTANT_OV")
+            mt = None if mt is None or pd.isna(mt) else float(mt)
+            alertes = []
+            bloque, lim, besoin, reste, cible = _blocage(dd["CLIENT"], per, mt, alertes)
+            rows.append({"REF_TL": f"OV:{x['FICHIER']}", "CLIENT": dd["CLIENT"], "NOM": x.get("NOM"), "PERIODE": per,
+                         "OBJET": denotage(per), "MONTANT_TL": None, "MONTANT_OV": mt, "STATUT_TRADE": "Non saisi",
+                         "DOSSIER_TLONE": x["FICHIER"], "STATUT_VIGILANCE": vig.get(x["FICHIER"]),
+                         "MONTANT_BLOQUE": round(bloque, 2), "DATE_LIMITE_BLOCAGE": lim, "MONTANT_A_BLOQUER": cible,
+                         "RESTE_A_BLOQUER": reste, "BLOCAGE": ("A_BLOQUER" if besoin else "OK" if mt else "SANS_OBJET"),
+                         "DOUBLON_AVEC": "", "STATUT": "A_SAISIR",
+                         "MOTIFS": "OV déposé, TL à saisir par l'agence dans CarthagoTrade", "ALERTE": " | ".join(alertes)})
     for _, r in anom.iterrows():
         d = r.to_dict()
         rows.append({"REF_TL": d["REF_TL"], "CLIENT": d["CLIENT"], "NOM": d.get("NOM"), "PERIODE": d.get("PERIODE"),
-                     "OBJET": d.get("OBJET"), "MONTANT_TL": d.get("MONTANT_TRADE"), "STATUT_TRADE": d.get("STATUT_TRADE"),
+                     "OBJET": d.get("OBJET"), "MONTANT_TL": d.get("MONTANT_TRADE"), "MONTANT_OV": None,
+                     "STATUT_TRADE": d.get("STATUT_TRADE"),
                      "DOSSIER_TLONE": None, "STATUT_VIGILANCE": None, "MONTANT_BLOQUE": None, "DATE_LIMITE_BLOCAGE": None,
-                     "MONTANT_A_BLOQUER": None, "RESTE_A_BLOQUER": None, "DOUBLON_AVEC": "", "STATUT": "ANOMALIE",
-                     "MOTIFS": MOTIF_ANOMALIE, "ALERTE": ""})
+                     "MONTANT_A_BLOQUER": None, "RESTE_A_BLOQUER": None, "BLOCAGE": "SANS_OBJET", "DOUBLON_AVEC": "",
+                     "STATUT": "ANOMALIE", "MOTIFS": MOTIF_ANOMALIE, "ALERTE": ""})
     out = pd.DataFrame(rows)
     return _apply_soldes(out, soldes)
 
 
 def _apply_soldes(out: pd.DataFrame, soldes: pd.DataFrame | None) -> pd.DataFrame:
-    """Solde_Dispo − Σ(à bloquer) ≥ 0 par client, périodes les plus anciennes d'abord ; sinon SOLDE_INSUFFISANT."""
+    """Blocages à faire, par client, des périodes les plus anciennes aux plus récentes : Solde_Dispo − Σ(à bloquer)
+    ≥ 0 (le compte ne devient jamais débiteur). Au premier blocage qui ne passe pas, les suivants attendent."""
     out["SOLDE_DISPO"] = None
     out["SOLDE_APRES_BLOCAGE"] = None
     if out.empty:
@@ -216,30 +279,39 @@ def _apply_soldes(out: pd.DataFrame, soldes: pd.DataFrame | None) -> pd.DataFram
     if soldes is not None and not soldes.empty:
         s1 = soldes[soldes["ORDINAL"].fillna("001") == "001"] if "ORDINAL" in soldes else soldes
         sol = s1.groupby("CLIENT")["SOLDE_DISPO"].sum().to_dict()
-    for cl, idx in out[out["STATUT"] == "A_BLOQUER"].sort_values("PERIODE").groupby("CLIENT").groups.items():
+    for cl, idx in out[out["BLOCAGE"] == "A_BLOQUER"].sort_values("PERIODE").groupby("CLIENT", sort=False).groups.items():
         dispo = sol.get(cl)
+        bloque_avant = False
         for i in idx:
             out.at[i, "SOLDE_DISPO"] = dispo
-            if dispo is None:
-                out.at[i, "MOTIFS"] = "Solde du compte inconnu (fichier comptes_solde)"
-                continue
             reste = float(out.at[i, "RESTE_A_BLOQUER"])
-            if dispo - reste >= 0:
+            if dispo is None:
+                out.at[i, "BLOCAGE"] = "SOLDE_INCONNU"
+                txt = "Solde du compte inconnu (fichier comptes_solde)"
+            elif bloque_avant or dispo - reste < 0:
+                out.at[i, "BLOCAGE"] = "SOLDE_INSUFFISANT"
+                txt = (f"Solde disponible {_fr(dispo)} < blocage {_fr(reste)}" if not bloque_avant
+                       else "Blocage d'une période plus ancienne en attente de solde")
+                bloque_avant = True
+            else:
                 dispo -= reste
                 out.at[i, "SOLDE_APRES_BLOCAGE"] = round(dispo, 2)
-            else:
+                continue
+            if out.at[i, "STATUT"] == "A_BLOQUER":
                 out.at[i, "STATUT"] = "SOLDE_INSUFFISANT"
-                out.at[i, "MOTIFS"] = f"Solde disponible {dispo:,.2f} < montant à bloquer {reste:,.2f}"
+            out.at[i, "MOTIFS"] = " | ".join(x for x in (out.at[i, "MOTIFS"], txt) if x)
     return out
 
 
 def fichier_blocages(pl: pd.DataFrame, debut: date | None = None, jours: int = BLOCAGE_JOURS) -> pd.DataFrame:
-    """Fichier à transmettre à l'agence : TL conformes à bloquer, solde suffisant (format du fichier Blocage).
+    """Fichier à transmettre à l'agence : blocages à faire (OV déposé, conforme ou non), solde suffisant, du plus
+    ancien au plus récent (format du fichier Blocage).
     `debut` = J+1 de l'extraction (voir debut_blocage) ; fin = début + 90 jours."""
     today = debut or date.today() + timedelta(days=1)
     if pl is None or pl.empty:
         return pd.DataFrame(columns=BLOCAGE_COLUMNS + ["REF_TL", "NOM"])
-    sel = pl[(pl["STATUT"] == "A_BLOQUER") & pl["SOLDE_APRES_BLOCAGE"].notna()]
+    col = "BLOCAGE" if "BLOCAGE" in pl else "STATUT"
+    sel = pl[(pl[col] == "A_BLOQUER") & pl["SOLDE_APRES_BLOCAGE"].notna()].sort_values(["CLIENT", "PERIODE"])
     rows = [{"SIEGE": str(r.CLIENT)[:5], "RACINE": str(r.CLIENT)[5:11], "ORDINAL": "001", "DEVISE": "DZD",
              "REFERENCE DENOTAGE DU MOUVEMENT": denotage(r.PERIODE), "MT BLOCAGE DEV CPT": r.RESTE_A_BLOQUER,
              "DATE DEBUT BLOCAGE": today.strftime("%Y%m%d"),

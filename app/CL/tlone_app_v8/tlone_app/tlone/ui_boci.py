@@ -26,7 +26,8 @@ def contexte(P, s) -> dict:
     vig = ui_vigilance.statut_map(P)
     dec = transfers.load_decisions(P.decisions_csv)
     plan = execution.plan(data.get("trade"), data.get("atlas"), data.get("blocage"), data.get("soldes"), SY, CH,
-                          dec, vig, majoration=s.provision_majoration_dzd, tol=s.tolerance_montant_dzd, planning=PL) \
+                          dec, vig, majoration=s.provision_majoration_dzd, tol=s.tolerance_montant_dzd, planning=PL,
+                          marge_min=s.blocage_marge_min_dzd, arrondi=s.blocage_arrondi_dzd) \
         if data.get("trade") is not None else pd.DataFrame()
     return {"files": files, "data": data, "res": res, "errs": errs, "A": A, "SY": SY, "CH": CH, "PL": PL,
             "vig": vig, "dec": dec, "plan": plan}
@@ -65,9 +66,22 @@ def render_final(P, s, ctx: dict) -> None:
     c[2].metric("En attente (blocage, complément…)", int((plan["STATUT"] != "A_EXECUTER").sum()))
     c[3].metric("Doublons écartés", int((plan["STATUT"] == "DOUBLON").sum()))
     st.caption("Un TL est prêt quand : dossier OV scanné, contrôlé et validé · vigilance RAS ou HIT levé · fonds bloqués "
-               "(TL + 5 000 DZD) · pas de doublon de période · présent dans CarthagoTrade (saisi et validé par l'agence).")
+               "(≥ OV + 3 700 DZD) · pas de doublon de période · présent dans CarthagoTrade (saisi et validé par l'agence).")
+    att = plan[plan["STATUT"] != "A_EXECUTER"]
+    if not att.empty:
+        with st.expander(f"Pourquoi {len(att)} TL en attente ?", expanded=prets.empty):
+            cols = [c for c in ("REF_TL", "NOM", "PERIODE", "MONTANT_OV", "MONTANT_TL", "STATUT", "BLOCAGE", "MONTANT_BLOQUE",
+                                "RESTE_A_BLOQUER", "MOTIFS") if c in att.columns]
+            v = att[cols].assign(STATUT=att["STATUT"].map(execution.LIB_STATUT))
+            if "BLOCAGE" in v:
+                v["BLOCAGE"] = v["BLOCAGE"].map(execution.LIB_BLOCAGE)
+            st.dataframe(v, hide_index=True, **W,
+                         height=hauteur(len(att)), column_config={k: st.column_config.NumberColumn(format="%.2f")
+                                                                  for k in ("MONTANT_OV", "MONTANT_TL", "MONTANT_BLOQUE", "RESTE_A_BLOQUER")})
+            st.caption("Blocage « À bloquer » : fichier de blocages pour l'agence sur la page Exécution & suivi, onglet ② "
+                       "(sans attendre la conformité). « Complément » : corriger ou valider le dossier OV.")
     if prets.empty:
-        st.warning("Aucun TL prêt pour le moment. Voir le détail des TL en attente (page Historique TL, onglet ② TL à exécuter).")
+        st.warning("Aucun TL prêt pour le moment : voir le motif de chaque TL en attente ci-dessus.")
         return
     params = boci.load_params(P)
     R = referentiels.load_all(P)
@@ -130,6 +144,23 @@ def render_agence(P, s, ctx: dict) -> None:
     if sel.empty:
         st.info("Aucun OV validé (page Transferts OV, onglet ③).")
         return
+    # TL déjà saisis dans CarthagoTrade (même client, même période, non rejetés) : rien à pré-saisir
+    tr = ctx["data"].get("trade")
+    if tr is not None and not tr.empty:
+        from . import historique as h
+        t = tr[tr["STATUT_TRADE"].map(h._statut_key) != "REJETE"]
+        deja = set(zip(t["CLIENT"].astype(str), t["PERIODE"].astype(str)))
+        dans = [(str(c), str(p)) in deja for c, p in zip(sel["SIEGE_RACINE"], sel["PERIODE_TL"])]
+        n_deja = sum(dans)
+        sel = sel[[not x for x in dans]]
+        if n_deja:
+            st.caption(f"{n_deja} OV validé(s) déjà saisi(s) dans CarthagoTrade (même salarié, même période) : exclus.")
+        if sel.empty:
+            st.success("Tous les OV validés sont déjà saisis dans CarthagoTrade : rien à pré-saisir.")
+            return
+    else:
+        st.caption("Export CarthagoTrade absent (page Exécution & suivi, onglet ①) : les OV déjà saisis ne peuvent "
+                   "pas être exclus.")
     prets = pd.DataFrame({"REF_TL": "", "CLIENT": sel["SIEGE_RACINE"], "NOM": sel["NOM"], "PERIODE": sel["PERIODE_TL"],
                           "MONTANT_TL": sel["MONTANT_OV"], "DOSSIER_TLONE": sel["FICHIER"]})
     prets["REF_TL"] = [f"OV:{f}" for f in sel["FICHIER"]]

@@ -91,8 +91,11 @@ def indicateurs(P, s) -> dict:
     cnt = plan["STATUT"].value_counts() if not plan.empty else pd.Series(dtype=int)
     for k in ("A_EXECUTER", "A_BLOQUER", "SOLDE_INSUFFISANT", "COMPLEMENT", "DOUBLON", "ANOMALIE"):
         K[k.lower()] = int(cnt.get(k, 0))
+    if not plan.empty and "BLOCAGE" in plan:
+        K["a_bloquer"] = int(((plan["BLOCAGE"] == "A_BLOQUER") & plan["SOLDE_APRES_BLOCAGE"].notna()).sum())
+        K["solde_insuffisant"] = int(plan["BLOCAGE"].isin(["SOLDE_INSUFFISANT", "SOLDE_INCONNU"]).sum())
     K["prets"] = K["a_executer"]
-    K["trade_saisis"] = len(plan) - K["anomalie"] if not plan.empty else 0
+    K["trade_saisis"] = (len(plan) - K["anomalie"] - int(cnt.get("A_SAISIR", 0))) if not plan.empty else 0
     K["montant_prets"] = float(plan[plan["STATUT"] == "A_EXECUTER"]["MONTANT_TL"].sum()) if not plan.empty else 0.0
     dev = {}
     if not plan.empty and not rhdf.empty:
@@ -151,7 +154,7 @@ def etapes(K: dict) -> list[dict]:
         dict(n=5, t="Fichier Trade pour l'agence", a="Data → Agence", k=f"{K['ov_valides']} OV validés",
              s="pré-saisie des TL dans CarthagoTrade", page="pages/5_Fichiers_BOCI.py"),
         dict(n=6, t="Virement des salaires → blocages", a="Employeur → Agence", k=f"{K['a_bloquer']} à bloquer",
-             s=f"{K['solde_insuffisant']} solde(s) insuffisant(s) · règle : solde − Σ(TL + 5 000) ≥ 0",
+             s=f"{K['solde_insuffisant']} solde(s) insuffisant(s) · dès le dépôt de l'OV, du plus ancien au plus récent",
              page="pages/4_Historique_TL.py", lien="TL à exécuter"),
         dict(n=7, t="Agence : dossier physique, blocage, Carthago", a="Agence (MOCI)", k=f"{K['trade_saisis']} TL saisis",
              s=f"{K['anomalie']} anomalie(s) Trade/Atlas · {K['doublon']} doublon(s)", ext=True),

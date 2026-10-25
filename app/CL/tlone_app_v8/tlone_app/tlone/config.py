@@ -194,6 +194,9 @@ class Settings:
     # Règles paramétrables (REG-05 / REG-06) — à confirmer métier (Q-01)
     plafond_pct_net: float = 0.95
     provision_majoration_dzd: float = 5000.0
+    # blocage : existant suffisant si ≥ OV + marge_min ; nouveau = OV arrondi au millier inférieur + majoration
+    blocage_marge_min_dzd: float = 3700.0
+    blocage_arrondi_dzd: float = 1000.0
     autorisation_validite_jours: int = 45
     # Vigilance : « Lieu de travail » de la check-list (raison sociale de l'employeur) et format des individus
     employeur_raison_sociale: str = "TOSYALI IRON STEEL INDUSTRY ALGERIE"
@@ -259,6 +262,8 @@ def load_settings(employeur: str | None = None, data_root: str | Path | None = N
         job_cmd_prefix=_env("TLONE_JOB_CMD", f"python {APP_DIR / 'run_step.py'}"),
         plafond_pct_net=float(_env("TLONE_PLAFOND_PCT_NET", "0.95")),
         provision_majoration_dzd=float(_env("TLONE_PROVISION_MAJORATION", "5000")),
+        blocage_marge_min_dzd=float(_env("TLONE_BLOCAGE_MARGE_MIN", "3700")),
+        blocage_arrondi_dzd=float(_env("TLONE_BLOCAGE_ARRONDI", "1000")),
         autorisation_validite_jours=int(_env("TLONE_AUTORISATION_JOURS", "45")),
         employeur_raison_sociale=raison,
         vigilance_individus=_env("TLONE_VIGILANCE_INDIVIDUS", "entier"),
