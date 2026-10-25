@@ -1600,6 +1600,38 @@ def test_notebook_ov_v30_beneficiaire_et_devise():
         assert f"'{lab}'" in allsrc and any(k[1] == lab for k in transfers.V27_LABELS)
 
 
+def test_compte_donneur_ordre_ligne_zone50_et_swift():
+    """Zone 50 lue d'un bloc : date séparée, RIB reconstitué (0270 + siège + racine + ordinal + clé) ; affichage
+    groupé des comptes / IBAN ; SWIFT au pays différent de l'IBAN signalé (YAPIKTRI lu pour YAPITRIS)."""
+    import re as _re
+    from datetime import date as _d
+    from tlone.common import compte_ov, fmt_compte, fmt_iban
+    assert compte_ov("210620260731010844800130") == ("02700731010844800130", _d(2026, 6, 21))
+    assert compte_ov("21|06|2026|07310|108448|001|30 DZD")[0] == "02700731010844800130"
+    assert compte_ov("0731010844800130")[0] == compte_ov("02700731010844800130")[0] == "02700731010844800130"
+    assert fmt_compte("02700731010844800130") == "027 007310 108448 001 30"
+    assert fmt_iban("TR270006701000000043536510") == "TR27 0006 7010 0000 0043 5365 10"
+    df = transfers.normaliser_ov(pd.DataFrame([{"fichier": "x.pdf", "OV.compte_debiteur": "210620260731010844800130",
+                                                "OV.date_demande": None}]))
+    assert df["OV.compte_debiteur"].iat[0] == "02700731010844800130" and df["OV.date_demande"].iat[0] == "21/06/2026"
+    s = load_settings()
+    reg = pd.DataFrame(columns=["PERIODE_ID", "DOM_ID", "FICHIER", "_MONTANT"])
+    d = {"fichier": "x.pdf", "OV.montant_chiffres": 100.0, "OV.swift": "YAPIKTRI",
+         "OV.beneficiaire_compte": "TR27 0006 7010 0000 0043 5365 10"}
+    _, rows = transfers.control_dossier(d, pd.DataFrame(), reg, pd.DataFrame(), pd.DataFrame(), s)
+    assert {r["CODE"]: r for r in rows}["R10"]["RESULTAT"] == "KO"
+    _, rows = transfers.control_dossier(dict(d, **{"OV.swift": "YAPITRIS"}), pd.DataFrame(), reg, pd.DataFrame(),
+                                        pd.DataFrame(), s)
+    assert {r["CODE"]: r for r in rows}["R10"]["RESULTAT"] == "OK"
+    cells = _nb_cells("pipeline_ocr_vl30.ipynb")
+    g = {"re": _re, "datetime": __import__("datetime").datetime}
+    exec(next(c for c in cells.values() if "def normalise_doc" in c), g)
+    o = g["normalise_doc"]("OV", {"type": "OV", "ligne_zone50": "2106202607310108448001 30 DZD",
+                                  "compte_donneur_ordre": "210620260731010844800130"})
+    assert o["compte_donneur_ordre"] == "02700731010844800130" and o["date_demande"] == "21/06/2026"
+    assert "Ligne zone 50 (brute)" in "\n".join(cells.values())
+
+
 def test_page_de_la_piece_et_r08_jours():
     from tlone.ui_ov import page_piece
     assert page_piece("OV:1, ANNEXE_I:2, ANNEXE_II:4+6, BULLETIN:5", "ANNEXE_II") == 4
