@@ -461,3 +461,25 @@ Les écarts tolérés restent visibles (ⓘ « Tolérance appliquée » dans la 
   = mots après « Nom/Prénom » (long espace possible, libellé retiré) ; `devise_transfert` = devise seule, colonne
   « Devise de transfert » ; texte brut dans « Nature paiement (autre libellé) » ; JSON dans `json_dossiers_v30`.
   Test : `TLONE_OV_NOTEBOOK=pipeline_ocr_vl30.ipynb` (App + worker).
+
+### 25/10/2026 — Lecture de l'OV (zone 50, SWIFT) et affichage des comptes (livré)
+- **Zone 50** : le modèle colle parfois la date au compte (« 21062026 0731010844800130 »). TL-One sépare la date
+  (jjmmaaaa en tête) et reconstitue le RIB de l'OV : 0270 + siège + racine + ordinal + clé, lecture retenue si la clé
+  Modulo 97 est juste (`common.compte_ov`, appliqué à la lecture du classeur OV, toutes versions). Lecture d'origine
+  gardée dans `OV.compte_debiteur_lu` ; date de la demande complétée si absente.
+- **Notebook v30** (toujours en test) : `ligne_zone50` = toute la ligne recopiée (colonne « Ligne zone 50 (brute) »),
+  structure expliquée au modèle (date, code banque 027 facultatif, siège 5, racine 6, ordinal 3, clé 2, DZD) ; SWIFT
+  lu case par case avec sa structure (4 lettres banque + pays = pays de l'IBAN + 2 + 3), sans XXX.
+- **R10 (nouveau, à vérifier)** : pays du SWIFT (5e-6e lettres) = pays de l'IBAN et 8 ou 11 caractères (détecte
+  YAPIKTRI lu pour YAPITRIS).
+- **Affichage** : comptes 027 007310 108448 001 30 ; identifiant client 07310 108448 ; IBAN par groupes de 4 (comptes
+  sans IBAN, ex. Inde, aussi par 4 pour la lecture) ; SWIFT de la base RH tel qu'écrit (pas de XXX). Les contrôles
+  comparent toujours les valeurs sans espaces.
+
+### Décision du 25/10/2026 — Pièce manquante ou non lue = motif de rejet (livré)
+- **T01** est toujours bloquant : OV, Annexe I, Annexe II et bulletin de paie obligatoires. Une pièce absente, ou
+  trouvée mais dont aucune donnée n'a été lue (page illisible / mal classée), rend le dossier non conforme
+  (« Trouvées mais non lues : Bulletin de paie — motif de rejet »). Démo : 07310-990106 (Annexe I manquante) passe de
+  « à revoir » à non conforme.
+- **T10** (95 % du net) : calculé uniquement sur le net à payer du bulletin. Le repli sur le salaire de l'Annexe II
+  est supprimé (il affichait dans la colonne Bulletin un montant absent du bulletin).
