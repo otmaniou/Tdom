@@ -490,3 +490,12 @@ Les écarts tolérés restent visibles (ⓘ « Tolérance appliquée » dans la 
   autorisation).
 - **Zone 50** : la date collée au compte peut aussi être sur 6 chiffres (jj|mm|aa, ex. 24|05|26) ; le RIB est
   reconstitué de même (clé Modulo 97 juste).
+
+## 25/10 (soir) — blocages et fichiers BOCI
+- Règle métier des blocages (Omar) : on n'attend pas la conformité du TL. Conditions : OV déposé, salaire perçu (= solde suffisant). Le client régularise pendant que les fonds sont bloqués.
+  * blocage existant suffisant s'il dépasse le montant OV d'au moins 3 700 DZD (TLONE_BLOCAGE_MARGE_MIN) ;
+  * nouveau blocage = montant OV arrondi au millier inférieur + 5 000 DZD (TLONE_BLOCAGE_ARRONDI, TLONE_PROVISION_MAJORATION), moins l'existant : 690 231,17 -> 695 000 ; 731 175,88 -> 736 000 ;
+  * par client, du plus ancien au plus récent ; au premier blocage que le solde ne couvre pas, les suivants attendent.
+- execution.plan : colonne BLOCAGE (OK / A_BLOQUER / SOLDE_INSUFFISANT / SOLDE_INCONNU / SANS_OBJET) séparée du statut d'exécution ; montant de référence = OV (Trade à défaut, ex. 09/2026 saisi à 0,00) ; OV déposés non saisis dans CarthagoTrade -> statut A_SAISIR, blocage possible ; blocage échu = alerte, à refaire.
+- Fichiers BOCI : tableau « Pourquoi N TL en attente ? » (statut, blocage, motifs). Fichier Trade agence : OV déjà saisis dans CarthagoTrade exclus.
+- Cas 07310 108448 : 05 et 06 bloqués à 695 000 -> suffisants (≥ OV + 3 700) ; 07, 08, 09 proposés au blocage à 736 000 chacun si le solde le permet, même non conformes (OV 731 175,88 > part du Planning 690 707 : augmentation absente du Planning à charger).
