@@ -1291,7 +1291,7 @@ def test_base_rh_lecture_controles_et_rapprochement(tmp_path):
                       "PART": "PART 1", "Compte devise": "TR70 0006 7010 0000 0023 0405 09"})])
     df = rh.read(tmp_path / "rh.xlsx")
     assert list(df["PERIODE"]) == ["2026-09P1", "2026-09P2", "2026-09P1"] and df["CLIENT"].iloc[0] == "07310108654"
-    assert df["SWIFT"].iloc[0] == "YAPITRISXXX" and rh.iban_ok(df["IBAN"].iloc[0])
+    assert df["SWIFT"].iloc[0] == "YAPITRIS" and rh.swift11(df["SWIFT"].iloc[0]) == "YAPITRISXXX" and rh.iban_ok(df["IBAN"].iloc[0])
     q = rh.dq(df)
     assert set(q[q["MATRICULE"] == "1543"]["CODE"]) >= {"RH04"} and "RH04" not in set(q[q["MATRICULE"] == "1030"]["CODE"])
     r, how = rh.match(df, "07310108654", "2026-09", "P2")
