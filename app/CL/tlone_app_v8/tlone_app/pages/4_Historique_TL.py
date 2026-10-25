@@ -16,7 +16,7 @@ P = s.paths
 ui.hero("Exécution et suivi des transferts",
         "Les TL saisis dans CarthagoTrade sont rapprochés des débits réels (Atlas) : ce qui est prêt à exécuter, ce qu'il "
         "faut bloquer, les doubles débits et les mois jamais transférés, avec leur motif.",
-        ["Blocage : solde − Σ(TL + 5 000) ≥ 0", "Seul le débit Atlas fait foi", "Fichier employeur"], etape="Étape 4 sur 5",
+        ["Blocage dès le dépôt de l'OV, du plus ancien au plus récent", "Seul le débit Atlas fait foi", "Fichier employeur"], etape="Étape 4 sur 5",
         expert_subtitle="CarthagoTrade × Atlas : TL saisis à exécuter (blocages, solde, doublons, compléments), TL "
                         "réellement exécutés (débit Atlas), anomalies (double débit, rejeté débité…), reliquats.")
 
@@ -85,7 +85,10 @@ with tab_exe:
     st.caption("TL saisis dans CarthagoTrade et absents de l'historique Atlas = TL à exécuter (un TL « Exécuté » dans Trade "
                "sans débit Atlas est classé ⚠️ Anomalie). Pour chacun : doublon, "
                "dossier scanné et validé dans TL-One, domiciliation / ATF / autorisation / plafonds (contrôles OV), "
-               f"vigilance, blocage ≥ TL + {ui.fmt_dzd(s.provision_majoration_dzd)} DZD, solde disponible.")
+               f"vigilance, blocage ≥ OV + {ui.fmt_dzd(s.blocage_marge_min_dzd)} DZD. Le blocage n'attend pas la "
+               "conformité : dès que l'OV est déposé et que le solde le permet (salaire perçu), il est proposé, "
+               f"au montant OV arrondi au millier inférieur + {ui.fmt_dzd(s.provision_majoration_dzd)} DZD, "
+               "des périodes les plus anciennes aux plus récentes.")
     sy = ch = None
     audits = transfers.latest_audit(P.tr_out)
     if audits:
@@ -97,21 +100,24 @@ with tab_exe:
         st.warning("Aucun lot OV extrait : tous les TL seront « dossier non scanné ».")
     plan = ex.plan(data.get("trade"), data.get("atlas"), data.get("blocage"), data.get("soldes"), sy, ch,
                    transfers.load_decisions(P.decisions_csv), vig, majoration=s.provision_majoration_dzd,
-                   tol=s.tolerance_montant_dzd, planning=PL)
+                   tol=s.tolerance_montant_dzd, planning=PL,
+                   marge_min=s.blocage_marge_min_dzd, arrondi=s.blocage_arrondi_dzd)
     if plan.empty:
         st.success("Aucun TL en attente d'exécution.")
     else:
         cnt = plan["STATUT"].value_counts()
         c = st.columns(6)
-        for i, (k, lab) in enumerate((("A_EXECUTER", "✅ Prêts"), ("A_BLOQUER", "🔒 À bloquer"),
-                                      ("COMPLEMENT", "📎 Complément"), ("DOUBLON", "⛔ Doublons"),
-                                      ("SOLDE_INSUFFISANT", "💰 Solde insuffisant"), ("ANOMALIE", "⚠️ Anomalies"))):
+        for i, (k, lab) in enumerate((("A_EXECUTER", "✅ Prêts"), ("COMPLEMENT", "📎 Complément"),
+                                      ("A_SAISIR", "📝 OV à saisir"), ("DOUBLON", "⛔ Doublons"),
+                                      ("ANOMALIE", "⚠️ Anomalies"))):
             c[i].metric(lab, int(cnt.get(k, 0)))
+        c[5].metric("🔒 Blocages à faire", int(((plan["BLOCAGE"] == "A_BLOQUER") & plan["SOLDE_APRES_BLOCAGE"].notna()).sum()))
         fil = st.multiselect("Statut", list(ex.LIB_STATUT), format_func=ex.LIB_STATUT.get, key="exe_f")
         pv = plan[plan["STATUT"].isin(fil)] if fil else plan
-        st.dataframe(pv.assign(STATUT=pv["STATUT"].map(ex.LIB_STATUT)), hide_index=True, **ui.W, height=380,
+        st.dataframe(pv.assign(STATUT=pv["STATUT"].map(ex.LIB_STATUT), BLOCAGE=pv["BLOCAGE"].map(ex.LIB_BLOCAGE)),
+                     hide_index=True, **ui.W, height=380,
                      column_config={k: st.column_config.NumberColumn(format="%.2f") for k in
-                                    ("MONTANT_TL", "MONTANT_BLOQUE", "MONTANT_A_BLOQUER", "RESTE_A_BLOQUER",
+                                    ("MONTANT_TL", "MONTANT_OV", "MONTANT_BLOQUE", "MONTANT_A_BLOQUER", "RESTE_A_BLOQUER",
                                      "SOLDE_DISPO", "SOLDE_APRES_BLOCAGE")})
         deb_bl, deb_txt = ex.debut_blocage(files)
         fb, fe = ex.fichier_blocages(plan, deb_bl), ex.fichier_employeur(plan)
@@ -126,7 +132,8 @@ with tab_exe:
                            file_name=f"TL_a_executer-{stamp}.xlsx")
         st.caption(f"Blocage : début {deb_bl:%d/%m/%Y} ({deb_txt}), durée {ex.BLOCAGE_JOURS} jours, ordinal 001, DZD, "
                    "référence de dénotage MMAAAA[P1|P2] ; "
-                   "uniquement si Solde_Dispo − Σ(TL + 5 000) ≥ 0 (le compte ne doit jamais devenir débiteur). "
+                   "montant = OV arrondi au millier inférieur + 5 000 DZD, moins l'existant ; uniquement si Solde_Dispo − "
+                   "Σ(blocages) ≥ 0, du plus ancien au plus récent (le compte ne devient jamais débiteur). "
                    "Les TL prêts (✅) alimenteront les fichiers CarthagoTrade / CarthagoDom / Règlement (formats à fournir).")
 
 if tab_plan:
