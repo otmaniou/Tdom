@@ -292,6 +292,9 @@ def display(kind: str, v) -> str | None:
         return " / ".join(x for x in (dmd, prm) if x) if (dmd or prm) else _txt(v)
     if kind == "info":
         return fmt_date(v) if parse_date(v) else _txt(v)
+    if kind == "compte":      # affichage seulement : 027 007310 108448 001 30
+        from .common import fmt_compte
+        return fmt_compte(_txt(v))
     return _txt(v)
 
 

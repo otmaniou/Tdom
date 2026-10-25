@@ -72,6 +72,7 @@ V27_LABELS = {
     ("ANNEXE_I", "Date de naissance"): "date_naissance", ("ANNEXE_I", "Résidence"): "residence",
     # v30 : « Devise de transfert » = la devise seule (USD…), texte de la case Autre dans une colonne à part
     ("OV", "Nature paiement (autre libellé)"): "nature_paiement_autre_libelle",
+    ("OV", "Ligne zone 50 (brute)"): "ligne_zone50",
 }
 
 MOIS = {"JANVIER": 1, "FEVRIER": 2, "MARS": 3, "AVRIL": 4, "MAI": 5, "JUIN": 6, "JUILLET": 7,
@@ -112,6 +113,33 @@ def read_audit_xlsx(path: Path) -> pd.DataFrame:
         cols.append(key if grp == "META" else f"{grp}.{key}")
     df = pd.DataFrame([r for r in rows[2:] if any(x is not None for x in r)], columns=cols)
     df["AUDIT_SOURCE"] = path.name
+    return normaliser_ov(df)
+
+
+def normaliser_ov(df: pd.DataFrame) -> pd.DataFrame:
+    """Compte donneur d'ordre (zone 50) : le modèle lit parfois toute la ligne, date comprise
+    (« 21062026 07310 108448 001 30 »). On sépare la date et on reconstitue le RIB de 20 chiffres de l'OV (0270 +
+    siège + racine + ordinal + clé, clé Modulo 97 juste) ; la lecture d'origine reste dans OV.compte_debiteur_lu.
+    Date de la demande complétée par celle de la ligne si elle n'a pas été lue à part."""
+    from .common import compte_ov
+    if df.empty or not ({"OV.compte_debiteur", "OV.ligne_zone50"} & set(df.columns)):
+        return df
+    df = df.copy()
+    for c in ("OV.compte_debiteur", "OV.date_demande"):
+        if c not in df.columns:
+            df[c] = None
+        df[c] = df[c].astype(object)
+    df["OV.compte_debiteur_lu"] = df["OV.compte_debiteur"]
+    lignes = df["OV.ligne_zone50"] if "OV.ligne_zone50" in df.columns else df["OV.compte_debiteur"]
+    for i, (lu, ligne) in enumerate(zip(df["OV.compte_debiteur"], lignes)):
+        rib, dte = compte_ov(lu)
+        if not rib or len(rib) != 20:
+            rib2, dte2 = compte_ov(ligne)
+            rib, dte = (rib2, dte2) if rib2 else (rib, dte)
+        if rib:
+            df.iat[i, df.columns.get_loc("OV.compte_debiteur")] = rib
+        if dte and is_blank(df["OV.date_demande"].iat[i]):
+            df.iat[i, df.columns.get_loc("OV.date_demande")] = dte.strftime("%d/%m/%Y")
     return df
 
 
@@ -355,6 +383,9 @@ class _Checks:
             self.add(code, libelle, ref, "BLOQUANT", "KO", f"{montant:,.2f} > {cap:,.2f} (écart {montant - cap:,.2f})")
 
 
+PIECES = ("OV", "ANNEXE_I", "ANNEXE_II", "BULLETIN")
+
+
 def _g(d: dict, k: str):
     v = d.get(k)
     return None if is_blank(v) else v
@@ -429,11 +460,19 @@ def control_dossier(d: dict, planning: pd.DataFrame, reg_ok: pd.DataFrame, atf: 
     tol = s.tolerance_montant_dzd
 
     # ---------- T01 pièces
+    # Les 4 pièces sont obligatoires : une pièce absente OU trouvée mais dont aucune donnée n'a été lue (page
+    # illisible, mal classée) est un motif de rejet (décision du 25/10/2026).
     manq = [x.strip() for x in str(_g(d, "pages_manquantes") or "").split(",") if x.strip()]
-    bloq = [x for x in manq if x in ("OV", "ANNEXE_II", "BULLETIN")]
-    ck.add("T01", "Pièces du dossier présentes", "REG-11 / REG-12 / AS-04",
-           "BLOQUANT" if bloq else ("REVIEW" if manq else "BLOQUANT"),
-           "KO" if manq else "OK", ("Manquantes : " + ", ".join(manq)) if manq else "OV, Annexe I, Annexe II, Bulletin")
+    meta = ("status", "validation_errors", "page")
+    non_lues = [pc for pc in PIECES if pc not in manq and not any(
+        not is_blank(v) for k, v in d.items() if k.startswith(pc + ".") and k.split(".", 1)[1] not in meta)]
+    lib = {"OV": "OV", "ANNEXE_I": "Annexe I", "ANNEXE_II": "Annexe II", "BULLETIN": "Bulletin de paie"}
+    ko01 = manq + non_lues
+    ck.add("T01", "Pièces du dossier présentes et lues (OV, Annexe I, Annexe II, bulletin)", "REG-11 / REG-12 / AS-04",
+           "BLOQUANT", "KO" if ko01 else "OK",
+           "; ".join(x for x in (("Manquantes : " + ", ".join(lib.get(x, x) for x in manq)) if manq else "",
+                                  ("Trouvées mais non lues : " + ", ".join(lib[x] for x in non_lues)) if non_lues else "")
+                     if x) + " — motif de rejet" if ko01 else "OV, Annexe I, Annexe II, Bulletin")
     if _g(d, "anomalies") is not None:
         ck.add("T01b", "Pages en doublon", "AS-04", "REVIEW", "KO", str(d.get("anomalies")))
 
@@ -582,10 +621,11 @@ def control_dossier(d: dict, planning: pd.DataFrame, reg_ok: pd.DataFrame, atf: 
     if cap_a2 is not None:
         caps["Annexe II"] = cap_a2
 
-    assiette = net if net is not None else sal_a2
-    cap95 = round(assiette * s.plafond_pct_net, 2) if assiette is not None else None
+    # 95 % du NET À PAYER du bulletin uniquement (plus de repli sur le salaire de l'Annexe II : un montant qui n'est
+    # pas sur le bulletin ne doit pas apparaître dans la colonne Bulletin)
+    cap95 = round(net * s.plafond_pct_net, 2) if net is not None else None
     ck.cmp_cap("T10", f"OV ≤ {s.plafond_pct_net:.0%} du net perçu", "REG-05 (assiette à confirmer, Q-01)",
-               montant, cap95, tol, "Net non lu (bulletin et Annexe II)")
+               montant, cap95, tol, "Net à payer du bulletin non lu")
     if cap95 is not None:
         caps[f"{s.plafond_pct_net:.0%} net"] = cap95
 
@@ -823,6 +863,16 @@ def _controles_beneficiaire(ck, d, r: dict | None) -> None:
     ck.add("R04", "Code SWIFT OV = base RH", "Base RH employeur", "INFO" if not sw_ov or not sw_rh else "REVIEW",
            "NON_CONTROLABLE" if not sw_ov or not sw_rh else ("OK" if sw_ov == sw_rh else "KO"),
            f"OV {sw_ov or '?'} / RH {sw_rh or '?'}")
+    # R10 : le code pays du SWIFT (5e-6e lettres) = pays de l'IBAN du bénéficiaire (ex. YAPIKTRI lu pour YAPITRIS :
+    # « KT » n'est pas « TR ») — détecte une lettre ajoutée ou décalée par la lecture des cases
+    sw_full = re.sub(r"[^A-Z0-9]", "", str(_g(d, "OV.swift") or "").upper())
+    ib_ov = ib["OV"] or ib["Annexe II"]
+    if sw_full and ib_ov and re.match(r"^[A-Z]{2}\d{2}", ib_ov):
+        bon = len(sw_full) in (8, 11) and sw_full[4:6] == ib_ov[:2]
+        ck.add("R10", "Code SWIFT cohérent avec l'IBAN (pays, 8 ou 11 caractères)", "OV", "REVIEW",
+               "OK" if bon else "KO",
+               f"SWIFT {sw_full} : pays « {sw_full[4:6]} », {len(sw_full)} caractères / IBAN {ib_ov[:2]}"
+               + ("" if bon else " — code SWIFT probablement mal lu (case par case)"))
     bq = {"OV": _g(d, "OV.banque_nom"), "Annexe II": _g(d, "ANNEXE_II.banque_etranger"), "Base RH": r.get("BANQUE_ETR")}
     vus = {k: v for k, v in bq.items() if not is_blank(v)}
     ref = next(iter(vus.values()), None)

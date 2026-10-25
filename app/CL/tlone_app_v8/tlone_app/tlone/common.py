@@ -271,3 +271,59 @@ def cached_read(path, tag: str, fn):
     except Exception:  # noqa: BLE001  dossier en lecture seule : pas de cache
         pass
     return val
+
+
+# ----------------------------------------------------------------- comptes : lecture de l'OV et affichage
+def rib_cle_ok(d: str) -> bool:
+    """Clé Modulo 97 d'un RIB de 20 chiffres (même règle que la Partie 2 : chiffres 4 à 20)."""
+    return len(d) == 20 and d.isdigit() and int(d[3:20]) % 97 == 0
+
+
+def compte_ov(v, date_lue=None) -> tuple[str | None, date | None]:
+    """Ligne « Date | Siège | Racine | Ordinal | Clé | devise » de l'OV lue d'un bloc (le modèle y colle parfois la
+    date) -> (RIB de 20 chiffres, date). Structure : date jjmmaaaa (jj|mm|aaaa, jjmm aaaa), code banque 027 parfois
+    absent, siège 5, racine 6, ordinal 3, clé 2, devise DZD. Le RIB est reconstitué tel que sur l'OV : 0270 + siège +
+    racine + ordinal + clé ; on garde la lecture dont la clé Modulo 97 est juste."""
+    if is_blank(v):
+        return None, None
+    d = digits(re.sub(r"(?i)DZD|DA\b", "", str(v)))
+    dte = None
+    if len(d) >= 24:                                   # date collée devant le compte
+        try:
+            x = datetime.strptime(d[:8], "%d%m%Y").date()
+            if 2000 <= x.year <= 2100:
+                dte, d = x, d[8:]
+        except ValueError:
+            pass
+    cands = []
+    if len(d) == 20:
+        cands.append(d)
+    if len(d) == 19 and d.startswith("027"):
+        cands.append("0270" + d[3:])
+    if len(d) == 16:
+        cands.append("0270" + d)
+    if len(d) == 17 and d.startswith("0"):
+        cands.append("027" + d)
+    ok = next((c for c in cands if rib_cle_ok(c)), None)
+    return (ok or (cands[0] if cands else (d or None))), dte
+
+
+def fmt_compte(v) -> str | None:
+    """027 007310 108448 001 30 (RIB 20 chiffres) ; 07310 108448 (identifiant client) ; sinon tel quel."""
+    if is_blank(v):
+        return None
+    d = digits(v)
+    if len(d) == 20 and re.fullmatch(r"[\d\s.|-]+", str(v).strip()):
+        return f"{d[:3]} {d[3:9]} {d[9:15]} {d[15:18]} {d[18:]}"
+    if len(d) == 11 and re.fullmatch(r"[\d\s.|-]+", str(v).strip()):
+        return f"{d[:5]} {d[5:]}"
+    return str(v).strip()
+
+
+def fmt_iban(v) -> str | None:
+    """IBAN par groupes de 4 (TR27 0006 7010 0000 0043 5365 10). Compte sans IBAN (ex. Inde, numéro seul) :
+    groupes de 4 aussi, pour la lecture seulement. Le contrôle compare toujours la valeur sans espaces."""
+    if is_blank(v):
+        return None
+    s = re.sub(r"[^A-Z0-9]", "", str(v).upper())
+    return " ".join(s[i:i + 4] for i in range(0, len(s), 4)) if s else None

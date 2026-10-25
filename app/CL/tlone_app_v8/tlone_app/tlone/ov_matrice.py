@@ -13,7 +13,7 @@ from dataclasses import dataclass
 
 import pandas as pd
 
-from .common import is_blank, name_similarity, parse_amount
+from .common import fmt_compte, fmt_iban, is_blank, name_similarity, parse_amount
 from .matrice import append_event, display, read_journal, same  # noqa: F401  (réexport pour l'UI)
 _REEXPORT = (append_event, read_journal)  # utilisés par l'UI via ov.append_event / ov.read_journal
 from .transfers import parse_periode
@@ -71,10 +71,10 @@ LIGNES_OV = [
             ("R05",)),
     LigneOV("beneficiaire", "Bénéficiaire du virement", "name",
             {"OV": "OV.beneficiaire_nom", "RH": "RH:BENEFICIAIRE"}, "OV", ("R06",)),
-    LigneOV("benef_compte", "IBAN du bénéficiaire (sans espaces)", "iban",
+    LigneOV("benef_compte", "IBAN du bénéficiaire (comparé sans espaces)", "iban",
             {"OV": "OV.beneficiaire_compte", "ANNEXE_II": "ANNEXE_II.compte_devise", "RH": "RH:IBAN"}, "OV",
             ("T02", "R03")),
-    LigneOV("swift", "Code SWIFT", "swift", {"OV": "OV.swift", "RH": "RH:SWIFT"}, "OV", ("T02", "R04")),
+    LigneOV("swift", "Code SWIFT", "swift", {"OV": "OV.swift", "RH": "RH:SWIFT"}, "OV", ("T02", "R04", "R10")),
     LigneOV("banque", "Banque bénéficiaire", "banque",
             {"OV": "OV.banque_nom", "ANNEXE_II": "ANNEXE_II.banque_etranger", "RH": "RH:BANQUE_ETR"}, "OV",
             ("T02", "R09")),
@@ -234,6 +234,7 @@ def build_ov(fichier: str, d: dict, sy: dict, checks: pd.DataFrame, planning: pd
                 cell["edit"] = ev
             cell["value"] = None if is_blank(v) else v
             cell["text"] = (display("amount", v) if lg.kind == "amount" else display("date", v) if lg.kind == "date"
+                            else fmt_compte(v) if lg.kind == "compte" else fmt_iban(v) if lg.kind == "iban"
                             else (None if is_blank(v) else str(v)))
             cells[c] = cell
         ref = lg.ref
@@ -284,6 +285,8 @@ def build_ov(fichier: str, d: dict, sy: dict, checks: pd.DataFrame, planning: pd
                     cells["OV"]["issues"].append(("bloq", str(ko[code]["DETAIL"])))
                 if code in ("T02",) and cells["OV"]["value"] is None and cells["OV"]["present"]:
                     cells["OV"]["issues"].append(("verif", "Mention non lue"))
+            if lg.key == "swift" and "R10" in ko and cells["OV"]["value"] is not None:
+                cells["OV"]["issues"].append(("verif", str(ko["R10"]["DETAIL"])))
             if lg.key == "periode" and "T04" in ko:
                 cells["PLANNING"]["issues"].append(("bloq", str(ko["T04"]["DETAIL"])))
         for cell in cells.values():
@@ -297,6 +300,10 @@ def build_ov(fichier: str, d: dict, sy: dict, checks: pd.DataFrame, planning: pd
         if lg.key == "montant" and txt and not is_blank(sy.get("PLAFOND_RETENU")):
             txt += f" · max. {display('amount', sy.get('PLAFOND_RETENU'))}" + (
                 f" ({sy.get('PLAFOND_LIMITANT')})" if not is_blank(sy.get("PLAFOND_LIMITANT")) else "")
+        if lg.kind == "compte":
+            txt = fmt_compte(retenu)
+        if lg.kind == "iban":
+            txt = fmt_iban(retenu)
         if lg.key == "devise":
             from .transfers import devise_transfert
             txt = devise_transfert(_brut(retenu)) or txt
