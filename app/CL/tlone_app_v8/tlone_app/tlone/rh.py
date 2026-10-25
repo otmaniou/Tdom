@@ -147,7 +147,9 @@ def _read(path: Path) -> pd.DataFrame:
               "DATE_ATTESTATION", "DATE_ETABLISSEMENT"):
         out[k] = df[k].map(parse_date)
     out["IBAN"] = df["IBAN"].map(iban_clean)
-    out["SWIFT"] = df["SWIFT"].map(lambda v: swift11(v) if not is_blank(v) else None)
+    # SWIFT gardé tel qu'écrit dans la base RH (8 ou 11 caractères, sans espaces) : les comparaisons portent sur les
+    # 8 premiers caractères ; le complément « XXX » (siège) n'est ajouté que dans les fichiers BOCI qui l'exigent
+    out["SWIFT"] = df["SWIFT"].map(lambda v: re.sub(r"[^A-Z0-9]", "", str(v).upper()) or None if not is_blank(v) else None)
     out["DEVISE"] = df["DEVISE"].map(lambda v: str(v).strip().upper() if not is_blank(v) else None)
     out["BENEFICIAIRE"] = [" ".join(str(x).strip() for x in (a, b) if not is_blank(x)) or None
                            for a, b in zip(df["BENEF_NOM"], df["BENEF_PRENOM"])]
