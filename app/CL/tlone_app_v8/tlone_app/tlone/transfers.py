@@ -815,15 +815,17 @@ def _controles_rh(ck, d, rh, client, mois, part, montant, devise, nom, tol, prow
         else:
             prt, note = None, " (base RH du mois entier : quote-part de la période inconnue)"
     r = dict(r, _PART_ATTENDUE=prt, _NOTE_RH=note.strip(" ()") or None)
+    # R02 : la part de la base RH est À TITRE D'INFORMATION (décision du 25/10/2026) ; le montant de l'OV est
+    # plafonné par l'Annexe II, 95 % du net, le Planning, l'ATF et l'autorisation (T09 à T13), pas par la base RH
     if montant is None or prt is None:
-        ck.add("R02", "Montant OV = part transférable RH", "Base RH employeur", "REVIEW", "NON_CONTROLABLE",
+        ck.add("R02", "Montant OV = part transférable RH (information)", "Base RH employeur", "INFO", "NON_CONTROLABLE",
                "Montant OV ou part RH absent")
     elif abs(montant - prt) <= max(tol, 1.0 if note else tol):
-        ck.add("R02", "Montant OV = part transférable RH", "Base RH employeur", "REVIEW", "OK", f"{montant:,.2f}{note}")
+        ck.add("R02", "Montant OV = part transférable RH (information)", "Base RH employeur", "INFO", "OK",
+               f"{montant:,.2f}{note}")
     else:
-        ck.add("R02", "Montant OV = part transférable RH", "Base RH employeur",
-               "BLOQUANT" if montant > prt + tol and not note else "REVIEW", "KO",
-               f"OV {montant:,.2f} / RH {prt:,.2f} (écart {montant - prt:,.2f}){note}")
+        ck.add("R02", "Montant OV = part transférable RH (information)", "Base RH employeur", "INFO", "KO",
+               f"OV {montant:,.2f} / RH {prt:,.2f} (écart {montant - prt:,.2f}){note} — information, non bloquant")
     # R03 (IBAN), R04 (SWIFT), R09 (banque) : _controles_beneficiaire, aussi sans base RH (OV / Annexe II)
     raw = _g(d, "OV.devise_transfert")
     dv, dv_rh = devise_transfert(raw), devise_transfert(r.get("DEVISE"))

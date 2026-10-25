@@ -286,26 +286,37 @@ def compte_ov(v, date_lue=None) -> tuple[str | None, date | None]:
     racine + ordinal + clé ; on garde la lecture dont la clé Modulo 97 est juste."""
     if is_blank(v):
         return None, None
-    d = digits(re.sub(r"(?i)DZD|DA\b", "", str(v)))
-    dte = None
-    if len(d) >= 24:                                   # date collée devant le compte
-        try:
-            x = datetime.strptime(d[:8], "%d%m%Y").date()
-            if 2000 <= x.year <= 2100:
-                dte, d = x, d[8:]
-        except ValueError:
-            pass
-    cands = []
-    if len(d) == 20:
-        cands.append(d)
-    if len(d) == 19 and d.startswith("027"):
-        cands.append("0270" + d[3:])
-    if len(d) == 16:
-        cands.append("0270" + d)
-    if len(d) == 17 and d.startswith("0"):
-        cands.append("027" + d)
-    ok = next((c for c in cands if rib_cle_ok(c)), None)
-    return (ok or (cands[0] if cands else (d or None))), dte
+    d0 = digits(re.sub(r"(?i)DZD|DA\b", "", str(v)))
+
+    def ribs(d):
+        c = []
+        if len(d) == 20:
+            c.append(d)
+        if len(d) == 19 and d.startswith("027"):
+            c.append("0270" + d[3:])
+        if len(d) == 16:
+            c.append("0270" + d)
+        if len(d) == 17 and d.startswith("0"):
+            c.append("027" + d)
+        return c
+    essais = [(None, d0)]
+    # date collée devant le compte : jjmmaaaa (8 chiffres) ou jjmmaa (6 chiffres, ex. 24|05|26)
+    for n, fmt in ((8, "%d%m%Y"), (6, "%d%m%y")):
+        if len(d0) >= n + 16:
+            try:
+                x = datetime.strptime(d0[:n], fmt).date()
+                if 2000 <= x.year <= 2100:
+                    essais.append((x, d0[n:]))
+            except ValueError:
+                pass
+    for dte, d in sorted(essais, key=lambda e: e[0] is None):      # d'abord les lectures avec une date
+        ok = next((c for c in ribs(d) if rib_cle_ok(c)), None)
+        if ok:
+            return ok, dte
+    for dte, d in essais:
+        if ribs(d):
+            return ribs(d)[0], dte
+    return (d0 or None), None
 
 
 def fmt_compte(v) -> str | None:

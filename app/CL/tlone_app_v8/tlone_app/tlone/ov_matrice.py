@@ -256,8 +256,7 @@ def build_ov(fichier: str, d: dict, sy: dict, checks: pd.DataFrame, planning: pd
                 if code in nc and cells[c]["present"] and cells[c]["value"] is None:
                     cells[c]["issues"].append(("verif", str(nc[code]["DETAIL"])))
             if "R02" in ko and cells["RH"]["value"] is not None:
-                sev = "bloq" if str(ko["R02"].get("SEVERITE")) == "BLOQUANT" else "incoh"
-                cells["RH"]["issues"].append((sev, str(ko["R02"]["DETAIL"])))
+                cells["RH"]["issues"].append(("info", str(ko["R02"]["DETAIL"])))
             for code in ("T03",):
                 if code in ko:
                     cells["OV"]["issues"].append(("bloq", str(ko[code]["DETAIL"])))
@@ -290,7 +289,7 @@ def build_ov(fichier: str, d: dict, sy: dict, checks: pd.DataFrame, planning: pd
             if lg.key == "periode" and "T04" in ko:
                 cells["PLANNING"]["issues"].append(("bloq", str(ko["T04"]["DETAIL"])))
         for cell in cells.values():
-            cell["open"] = bool(cell["issues"])
+            cell["open"] = any(k != "info" for k, _ in cell["issues"])
             cell["bloq"] = any(k == "bloq" for k, _ in cell["issues"])
         opens = [c for c in cells.values() if c["open"]]
         coh = "✗ bloquant" if any(c["bloq"] for c in opens) else ("✗ écart" if any(
